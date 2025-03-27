@@ -193,7 +193,7 @@ async fn handle_make_invoice(
 ) -> Result<Response, NIP47Error> {
     let description = params.description.unwrap_or_default();
     let invoice = multimint
-        .make_invoice(params.amount, description, params.expiry)
+        .make_invoice(params.amount, description, params.expiry, params.extra_meta)
         .await
         .map_err(|e| NIP47Error {
             code: ErrorCode::PaymentFailed,

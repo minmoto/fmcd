@@ -26,6 +26,7 @@ pub struct LnInvoiceExternalPubkeyTweakedRequest {
     pub tweak: u64,
     pub gateway_id: PublicKey,
     pub federation_id: FederationId,
+    pub extra_meta: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -58,7 +59,7 @@ async fn _invoice(
             req.expiry_time,
             req.external_pubkey,
             req.tweak,
-            (),
+            req.extra_meta.unwrap_or_default(),
             Some(gateway),
         )
         .await?;

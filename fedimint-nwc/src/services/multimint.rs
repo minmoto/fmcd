@@ -152,6 +152,7 @@ impl MultiMintService {
         amount_msat: u64,
         description: String,
         expiry_time: Option<u64>,
+        extra_meta: Option<serde_json::Value>,
     ) -> Result<Bolt11Invoice> {
         let client = self.get_client(None).await?;
         let gateway = self.get_gateway(&client).await?;
@@ -162,7 +163,7 @@ impl MultiMintService {
                 Amount::from_msats(amount_msat),
                 Bolt11InvoiceDescription::Direct(&Description::new(description)?),
                 expiry_time,
-                (),
+                extra_meta.unwrap_or_default(),
                 Some(gateway),
             )
             .await?;

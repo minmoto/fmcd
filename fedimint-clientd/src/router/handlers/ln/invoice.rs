@@ -24,6 +24,7 @@ pub struct LnInvoiceRequest {
     pub expiry_time: Option<u64>,
     pub gateway_id: PublicKey,
     pub federation_id: FederationId,
+    pub extra_meta: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -54,7 +55,7 @@ async fn _invoice(
             req.amount_msat,
             Bolt11InvoiceDescription::Direct(&Description::new(req.description)?),
             req.expiry_time,
-            (),
+            req.extra_meta.unwrap_or_default(),
             Some(gateway),
         )
         .await?;
