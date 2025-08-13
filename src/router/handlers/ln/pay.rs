@@ -39,7 +39,7 @@ pub struct LnPayResponse {
 async fn _pay(client: ClientHandleArc, req: LnPayRequest) -> Result<LnPayResponse, AppError> {
     let bolt11 = get_invoice(&req).await?;
     info!("Paying invoice: {bolt11}");
-    let lightning_module = client.get_first_module::<LightningClientModule>();
+    let lightning_module = client.get_first_module::<LightningClientModule>()?;
     let gateway = lightning_module
         .select_gateway(&req.gateway_id)
         .await

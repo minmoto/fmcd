@@ -80,7 +80,6 @@ use tracing::{info, warn};
 
 pub mod client;
 pub mod db;
-pub mod types;
 
 use self::client::LocalClientBuilder;
 use self::db::FederationConfig;
@@ -135,7 +134,7 @@ impl MultiMint {
     /// ```
     pub async fn new(work_dir: PathBuf) -> Result<Self> {
         let db = Database::new(
-            fedimint_rocksdb::RocksDb::open(work_dir.join("multimint.db"))?,
+            fedimint_rocksdb::RocksDb::open(work_dir.join("multimint.db")).await?,
             Default::default(),
         );
         let mnemonic = load_or_generate_mnemonic(&db).await?;
@@ -263,10 +262,17 @@ impl MultiMint {
         for (federation_id, client) in clients.iter() {
             warn!("Updating gateway cache for {:?}", federation_id);
             let lightning_client = client.get_first_module::<LightningClientModule>();
-            if let Err(e) = lightning_client.update_gateway_cache().await {
+            if let Ok(lightning_client) = lightning_client {
+                if let Err(e) = lightning_client.update_gateway_cache().await {
+                    warn!(
+                        "Failed to update gateway cache for {:?}: {:?}",
+                        federation_id, e
+                    );
+                }
+            } else {
                 warn!(
-                    "Failed to update gateway cache for {:?}: {:?}",
-                    federation_id, e
+                    "Failed to get lightning client module for {:?}",
+                    federation_id
                 );
             }
         }

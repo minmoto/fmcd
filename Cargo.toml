@@ -14,7 +14,6 @@ anyhow = "1.0.75"
 axum = { version = "0.7.1", features = ["json", "ws"] }
 axum-macros = "0.4.0"
 dotenv = "0.15.0"
-fedimint = "0.0.1"
 serde = "1.0.193"
 serde_json = "1.0.108"
 tokio = { version = "1.34.0", features = ["full"] }
@@ -25,26 +24,27 @@ lazy_static = "1.4.0"
 async-utility = "0.2.0"
 tower-http = { version = "0.5.2", features = ["cors", "auth", "trace"] }
 itertools = "0.12.0"
-lnurl-rs = { version = "0.5.0", features = ["async"], default-features = false }
+lnurl-rs = { version = "0.9.0", features = ["async"], default-features = false }
 reqwest = { version = "0.12.3", features = [
   "json",
   "rustls-tls",
 ], default-features = false }
-bitcoin = "0.30.2"
+bitcoin = "0.32.7"
 time = { version = "0.3.25", features = ["formatting"] }
 chrono = "0.4.31"
 futures-util = "0.3.30"
 clap = { version = "3", features = ["derive", "env"] }
 # Dependencies from multimint
-fedimint-api-client = "0.4.2"
-fedimint-client = "0.4.2"
-fedimint-core = "0.4.2"
-fedimint-wallet-client = "0.4.2"
-fedimint-mint-client = "0.4.2"
-fedimint-ln-client = "0.4.2"
-fedimint-ln-common = "0.4.2"
-fedimint-rocksdb = "0.4.2"
-fedimint-bip39 = "0.4.2"
+fedimint-api-client = "0.8.0"
+fedimint-client = "0.8.0"
+fedimint-core = "0.8.0"
+fedimint-wallet-client = "0.8.0"
+fedimint-mint-client = "0.8.0"
+fedimint-ln-client = "0.8.0"
+fedimint-ln-common = "0.8.0"
+fedimint-rocksdb = "0.8.0"
+fedimint-bip39 = "0.8.0"
+fedimint-derive-secret = "0.8.0"
 rand = "0.8.5"
 bip39 = "2.1.0"
 hex = "0.4.3"

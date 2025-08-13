@@ -41,7 +41,7 @@ async fn _list_operations(
         .encode();
     let operations = client
         .operation_log()
-        .list_operations(req.limit, None)
+        .paginate_operations_rev(req.limit, None)
         .await
         .into_iter()
         .map(|(k, v)| -> Result<OperationOutput, anyhow::Error> {

@@ -70,7 +70,7 @@ pub async fn wait_for_ln_payment(
     contract_id: String,
     return_on_funding: bool,
 ) -> anyhow::Result<Option<LnPayResponse>> {
-    let lightning_module = client.get_first_module::<LightningClientModule>();
+    let lightning_module = client.get_first_module::<LightningClientModule>()?;
     match payment_type {
         PayType::Internal(operation_id) => {
             let mut updates = lightning_module

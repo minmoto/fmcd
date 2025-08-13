@@ -28,7 +28,7 @@ async fn _validate(
     req: ValidateRequest,
 ) -> Result<ValidateResponse, AppError> {
     let amount_msat = client
-        .get_first_module::<MintClientModule>()
+        .get_first_module::<MintClientModule>()?
         .validate_notes(&req.notes)?;
 
     Ok(ValidateResponse { amount_msat })

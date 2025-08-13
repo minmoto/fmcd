@@ -31,7 +31,7 @@ FMCD_INVITE_CODE="fed1-fedimint-invite-code"
 
 ## Fedimint Clientd Endpoints
 
-`fmcd` supports the following endpoints (and has naive websocket support at `/v2/ws`, see code for details until I improve the interface. PRs welcome!). All the endpoints are authed with a Bearer token from the password (from CLI or env). You can hit the endpoints as such with curl, or use the python/typescript/golang wrappers:
+`fmcd` supports the following endpoints (and has naive websocket support at `/v2/ws`, see code for details until I improve the interface. PRs welcome!). All the endpoints are authed with a Bearer token from the password (from CLI or env). You can hit the endpoints as such with curl:
 
 ```
 curl http://localhost:3333/v2/admin/info -H 'Authorization: Bearer some-secure-password-that-becomes-the-bearer-token'

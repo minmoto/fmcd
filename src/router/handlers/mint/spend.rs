@@ -37,7 +37,7 @@ pub struct SpendResponse {
 
 async fn _spend(client: ClientHandleArc, req: SpendRequest) -> Result<SpendResponse, AppError> {
     warn!("The client will try to double-spend these notes after the duration specified by the --timeout option to recover any unclaimed e-cash.");
-    let mint_module = client.get_first_module::<MintClientModule>();
+    let mint_module = client.get_first_module::<MintClientModule>()?;
     let timeout = Duration::from_secs(req.timeout);
     let (operation, notes) = if req.allow_overpay {
         let (operation, notes) = mint_module
@@ -50,7 +50,7 @@ async fn _spend(client: ClientHandleArc, req: SpendRequest) -> Result<SpendRespo
             )
             .await?;
 
-        let overspend_amount = notes.total_amount() - req.amount_msat;
+        let overspend_amount = notes.total_amount().saturating_sub(req.amount_msat);
         if overspend_amount != Amount::ZERO {
             warn!(
                 "Selected notes {} worth more than requested",

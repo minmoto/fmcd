@@ -40,7 +40,7 @@ async fn _invoice(
     client: ClientHandleArc,
     req: LnInvoiceExternalPubkeyTweakedRequest,
 ) -> Result<LnInvoiceExternalPubkeyTweakedResponse, AppError> {
-    let lightning_module = client.get_first_module::<LightningClientModule>();
+    let lightning_module = client.get_first_module::<LightningClientModule>()?;
     let gateway = lightning_module
         .select_gateway(&req.gateway_id)
         .await
@@ -55,7 +55,7 @@ async fn _invoice(
     let (operation_id, invoice, _) = lightning_module
         .create_bolt11_invoice_for_user_tweaked(
             req.amount_msat,
-            Bolt11InvoiceDescription::Direct(&Description::new(req.description)?),
+            Bolt11InvoiceDescription::Direct(Description::new(req.description)?),
             req.expiry_time,
             req.external_pubkey,
             req.tweak,

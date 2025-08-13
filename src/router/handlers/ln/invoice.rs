@@ -38,7 +38,7 @@ async fn _invoice(
     client: ClientHandleArc,
     req: LnInvoiceRequest,
 ) -> Result<LnInvoiceResponse, AppError> {
-    let lightning_module = client.get_first_module::<LightningClientModule>();
+    let lightning_module = client.get_first_module::<LightningClientModule>()?;
     let gateway = lightning_module
         .select_gateway(&req.gateway_id)
         .await
@@ -53,7 +53,7 @@ async fn _invoice(
     let (operation_id, invoice, _) = lightning_module
         .create_bolt11_invoice(
             req.amount_msat,
-            Bolt11InvoiceDescription::Direct(&Description::new(req.description)?),
+            Bolt11InvoiceDescription::Direct(Description::new(req.description)?),
             req.expiry_time,
             req.extra_meta.unwrap_or_default(),
             Some(gateway),

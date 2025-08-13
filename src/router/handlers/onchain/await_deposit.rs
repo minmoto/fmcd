@@ -31,7 +31,7 @@ async fn _await_deposit(
     req: AwaitDepositRequest,
 ) -> Result<AwaitDepositResponse, AppError> {
     let mut updates = client
-        .get_first_module::<WalletClientModule>()
+        .get_first_module::<WalletClientModule>()?
         .subscribe_deposit(req.operation_id)
         .await?
         .into_stream();

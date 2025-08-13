@@ -18,7 +18,7 @@ pub struct ListGatewaysRequest {
 }
 
 async fn _list_gateways(client: ClientHandleArc) -> Result<Value, AppError> {
-    let lightning_module = client.get_first_module::<LightningClientModule>();
+    let lightning_module = client.get_first_module::<LightningClientModule>()?;
     let gateways = lightning_module.list_gateways().await;
     if gateways.is_empty() {
         return Ok(serde_json::to_value(Vec::<String>::new())?);
