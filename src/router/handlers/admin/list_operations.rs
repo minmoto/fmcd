@@ -1,11 +1,11 @@
 use std::time::UNIX_EPOCH;
 
-use crate::multimint::fedimint_client::ClientHandleArc;
-use crate::multimint::fedimint_core::config::FederationId;
-use crate::multimint::fedimint_core::core::OperationId;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
+use fedimint_client::ClientHandleArc;
+use fedimint_core::config::FederationId;
+use fedimint_core::core::OperationId;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use time::format_description::well_known::iso8601;

@@ -1,16 +1,14 @@
-use crate::multimint::fedimint_client::ClientHandleArc;
-use crate::multimint::fedimint_core::config::FederationId;
-use crate::multimint::fedimint_core::core::OperationId;
-use crate::multimint::fedimint_core::secp256k1::PublicKey;
-use crate::multimint::fedimint_core::Amount;
-use crate::multimint::fedimint_ln_client::LightningClientModule;
-use crate::multimint::fedimint_ln_common::lightning_invoice::{
-    Bolt11InvoiceDescription, Description,
-};
 use anyhow::anyhow;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
+use fedimint_client::ClientHandleArc;
+use fedimint_core::config::FederationId;
+use fedimint_core::core::OperationId;
+use fedimint_core::secp256k1::PublicKey;
+use fedimint_core::Amount;
+use fedimint_ln_client::LightningClientModule;
+use fedimint_ln_common::lightning_invoice::{Bolt11InvoiceDescription, Description};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::error;

@@ -1,10 +1,10 @@
-use crate::multimint::fedimint_client::ClientHandleArc;
-use crate::multimint::fedimint_core::Amount;
-use crate::multimint::fedimint_mint_client::{MintClientModule, OOBNotes};
 use anyhow::anyhow;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
+use fedimint_client::ClientHandleArc;
+use fedimint_core::Amount;
+use fedimint_mint_client::{MintClientModule, OOBNotes};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 

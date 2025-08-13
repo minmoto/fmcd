@@ -1,10 +1,10 @@
-use crate::multimint::fedimint_client::ClientHandleArc;
-use crate::multimint::fedimint_core::config::FederationId;
-use crate::multimint::fedimint_ln_client::LightningClientModule;
 use anyhow::anyhow;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
+use fedimint_client::ClientHandleArc;
+use fedimint_core::config::FederationId;
+use fedimint_ln_client::LightningClientModule;
 use serde::Deserialize;
 use serde_json::{json, Value};
 

@@ -1,17 +1,17 @@
 use std::collections::{BTreeMap, HashMap};
 
-use crate::multimint::fedimint_core::config::FederationId;
-use crate::multimint::fedimint_core::{Amount, TieredCounts};
-use crate::multimint::fedimint_mint_client::MintClientModule;
-use crate::multimint::fedimint_wallet_client::WalletClientModule;
-use crate::multimint::MultiMint;
 use anyhow::Error;
 use axum::extract::State;
 use axum::Json;
+use fedimint_core::config::FederationId;
+use fedimint_core::{Amount, TieredCounts};
+use fedimint_mint_client::MintClientModule;
+use fedimint_wallet_client::WalletClientModule;
 use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::error::AppError;
+use crate::multimint::MultiMint;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize)]

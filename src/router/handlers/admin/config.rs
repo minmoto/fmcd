@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use crate::multimint::MultiMint;
 use axum::extract::State;
 use axum::Json;
 use serde_json::{json, Value};
 
 use crate::error::AppError;
+use crate::multimint::MultiMint;
 use crate::state::AppState;
 
 async fn _config(multimint: MultiMint) -> Result<Value, AppError> {

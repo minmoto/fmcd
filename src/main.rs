@@ -8,10 +8,10 @@ use axum::extract::{MatchedPath, Request};
 use axum::http::Method;
 use axum::middleware::{self, Next};
 use axum::response::IntoResponse;
+use fedimint_core::invite_code::InviteCode;
 use futures::future::TryFutureExt;
 use futures::try_join;
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
-use multimint::fedimint_core::invite_code::InviteCode;
 use router::handlers::{admin, ln, mint, onchain};
 use router::ws::websocket_handler;
 use tower_http::cors::{Any, CorsLayer};
@@ -60,19 +60,19 @@ enum Commands {
 #[clap(version = "1.0", author = "Kody Low")]
 struct Cli {
     /// Federation invite code
-    #[clap(long, env = "FEDIMINT_CLIENTD_INVITE_CODE", required = false)]
+    #[clap(long, env = "FMCD_INVITE_CODE", required = false)]
     invite_code: String,
 
     /// Path to FM database
-    #[clap(long, env = "FEDIMINT_CLIENTD_DB_PATH", required = true)]
+    #[clap(long, env = "FMCD_DB_PATH", required = true)]
     db_path: PathBuf,
 
     /// Password
-    #[clap(long, env = "FEDIMINT_CLIENTD_PASSWORD", required = true)]
+    #[clap(long, env = "FMCD_PASSWORD", required = true)]
     password: String,
 
     /// Addr
-    #[clap(long, env = "FEDIMINT_CLIENTD_ADDR", required = true)]
+    #[clap(long, env = "FMCD_ADDR", required = true)]
     addr: String,
 
     /// Prometheus addr
@@ -80,11 +80,11 @@ struct Cli {
     prometheus_addr: String,
 
     /// Manual secret
-    #[clap(long, env = "FEDIMINT_CLIENTD_MANUAL_SECRET", required = false)]
+    #[clap(long, env = "FMCD_MANUAL_SECRET", required = false)]
     manual_secret: Option<String>,
 
     /// Mode: ws, rest
-    #[clap(long, env = "FEDIMINT_CLIENTD_MODE", default_value = "rest")]
+    #[clap(long, env = "FMCD_MODE", default_value = "rest")]
     mode: Mode,
 }
 
@@ -113,7 +113,7 @@ async fn main() -> Result<()> {
     }
 
     if state.multimint.all().await.is_empty() {
-        return Err(anyhow::anyhow!("No clients found, must have at least one client to start the server. Try providing a federation invite code with the `--invite-code` flag or setting the `FEDIMINT_CLIENTD_INVITE_CODE` environment variable."));
+        return Err(anyhow::anyhow!("No clients found, must have at least one client to start the server. Try providing a federation invite code with the `--invite-code` flag or setting the `FMCD_INVITE_CODE` environment variable."));
     }
 
     let main_server = start_main_server(&cli.addr, &cli.password, cli.mode, state)
@@ -155,7 +155,7 @@ async fn start_main_server(
         .route_layer(middleware::from_fn(track_metrics));
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    info!("fedimint-clientd listening on {addr:?}");
+    info!("fmcd listening on {addr:?}");
     axum::serve(listener, app).await?;
     Ok(())
 }

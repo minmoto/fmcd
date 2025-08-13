@@ -63,7 +63,6 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -71,29 +70,20 @@ use bip39::Mnemonic;
 use fedimint_bip39::Bip39RootSecretStrategy;
 use fedimint_client::secret::RootSecretStrategy;
 use fedimint_client::{Client, ClientHandleArc};
-use fedimint_core::config::{FederationId, FederationIdPrefix, JsonClientConfig};
+use fedimint_core::config::{FederationId, FederationIdPrefix};
 use fedimint_core::db::Database;
 use fedimint_core::invite_code::InviteCode;
-use fedimint_core::Amount;
 use fedimint_ln_client::LightningClientModule;
-use fedimint_mint_client::MintClientModule;
-use fedimint_wallet_client::WalletClientModule;
 use rand::thread_rng;
 use tokio::sync::Mutex;
 use tracing::{info, warn};
-use types::InfoResponse;
-// Reexport all the fedimint crates for ease of use
-pub use {
-    fedimint_client, fedimint_core, fedimint_ln_client, fedimint_ln_common, fedimint_mint_client,
-    fedimint_wallet_client,
-};
 
 pub mod client;
 pub mod db;
 pub mod types;
 
-use crate::client::LocalClientBuilder;
-use crate::db::FederationConfig;
+use self::client::LocalClientBuilder;
+use self::db::FederationConfig;
 
 /// `MultiMint` is a struct for managing Fedimint Clients across multiple
 /// federations.
@@ -242,13 +232,6 @@ impl MultiMint {
         self.clients.lock().await.get(federation_id).cloned()
     }
 
-    /// Get a client by its federation id as a string. (Useful for passing in
-    /// from the command line or typescript/python/golang sdks)
-    pub async fn get_by_str(&self, federation_id_str: &str) -> Option<ClientHandleArc> {
-        let federation_id = FederationId::from_str(federation_id_str).ok()?;
-        self.get(&federation_id).await
-    }
-
     /// Get a client by its federation id prefix. (Useful for checking if a
     /// client exists for given ecash notes)
     pub async fn get_by_prefix(
@@ -270,90 +253,6 @@ impl MultiMint {
             Some(federation_id) => self.get(&federation_id).await,
             None => None,
         }
-    }
-
-    /// Update a client by its federation id.
-    pub async fn update(&self, federation_id: &FederationId, new_client: ClientHandleArc) {
-        self.clients.lock().await.insert(*federation_id, new_client);
-    }
-
-    /// Remove a client by its federation id.
-    pub async fn remove(&self, federation_id: &FederationId) {
-        self.clients.lock().await.remove(federation_id);
-    }
-
-    /// Check if a client exists by its federation id.
-    pub async fn has(&self, federation_id: &FederationId) -> bool {
-        self.clients.lock().await.contains_key(federation_id)
-    }
-
-    /// Check if a client exists by its federation id as a string.
-    pub async fn has_by_str(&self, federation_id_str: &str) -> bool {
-        let federation_id = match FederationId::from_str(federation_id_str) {
-            Ok(federation_id) => federation_id,
-            Err(_) => return false,
-        };
-
-        self.has(&federation_id).await
-    }
-
-    /// Get the configs for all the clients in the multimint.
-    pub async fn configs(&self) -> Result<BTreeMap<FederationId, JsonClientConfig>> {
-        let mut configs_map = BTreeMap::new();
-        let clients = self.clients.lock().await;
-
-        for (federation_id, client) in clients.iter() {
-            let client_config = client.get_config_json().await;
-            configs_map.insert(*federation_id, client_config);
-        }
-
-        Ok(configs_map)
-    }
-
-    /// Get the balances for all the clients in the multimint.
-    pub async fn ecash_balances(&self) -> Result<BTreeMap<FederationId, Amount>> {
-        let mut balances = BTreeMap::new();
-        let clients = self.clients.lock().await;
-
-        for (federation_id, client) in clients.iter() {
-            let balance = client.get_balance().await;
-            balances.insert(*federation_id, balance);
-        }
-
-        Ok(balances)
-    }
-
-    /// Get the info for all the clients in the multimint.
-    pub async fn info(&self) -> Result<BTreeMap<FederationId, InfoResponse>> {
-        let mut info_map = BTreeMap::new();
-        let clients = self.clients.lock().await;
-
-        for (federation_id, client) in clients.iter() {
-            let mint_client = client.get_first_module::<MintClientModule>();
-            let wallet_client = client.get_first_module::<WalletClientModule>();
-            let summary = mint_client
-                .get_wallet_summary(
-                    &mut self
-                        .db
-                        .begin_transaction_nc()
-                        .await
-                        .to_ref_with_prefix_module_id(1),
-                )
-                .await;
-
-            let info = InfoResponse {
-                federation_id: *federation_id,
-                network: wallet_client.get_network().to_string(),
-                meta: client.config().await.global.meta.clone(),
-                total_amount_msat: summary.total_amount(),
-                total_num_notes: summary.count_items(),
-                denominations_msat: summary,
-            };
-
-            info_map.insert(*federation_id, info);
-        }
-
-        Ok(info_map)
     }
 
     /// Update the gateway caches for all the lightning modules in the
@@ -394,18 +293,3 @@ async fn load_or_generate_mnemonic(db: &Database) -> Result<Mnemonic> {
         },
     )
 }
-
-// Re-export all the fedimint types that were previously exposed through the multimint crate
-pub use fedimint_api_client;
-pub use fedimint_bip39;
-pub use fedimint_client;
-pub use fedimint_core;
-pub use fedimint_ln_client;
-pub use fedimint_ln_common;
-pub use fedimint_mint_client;
-pub use fedimint_rocksdb;
-pub use fedimint_wallet_client;
-
-// Re-export MultiMint and other types from this module
-pub use client::*;
-pub use types::*;

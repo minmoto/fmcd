@@ -3,8 +3,8 @@ procs:
     shell: zsh # if on macOS
     # shell: bash # if on Linux
     stop: SIGKILL
-  fedimint-clientd:
-    shell: export RUST_BACKTRACE=1 && cargo run --manifest-path fedimint-clientd/Cargo.toml
+  fmcd:
+    shell: export RUST_BACKTRACE=1 && cargo run --manifest-path ./Cargo.toml
     stop: SIGTERM
   ngrok:
     shell: ngrok http http://localhost:3333

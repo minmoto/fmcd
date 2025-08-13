@@ -8,9 +8,9 @@ pub mod list_operations;
 pub mod module;
 pub mod restore;
 
-use crate::multimint::fedimint_client::ClientHandleArc;
-use crate::multimint::fedimint_mint_client::MintClientModule;
-use crate::multimint::fedimint_wallet_client::WalletClientModule;
+use fedimint_client::ClientHandleArc;
+use fedimint_mint_client::MintClientModule;
+use fedimint_wallet_client::WalletClientModule;
 use info::InfoResponse;
 
 pub async fn _get_note_summary(client: &ClientHandleArc) -> anyhow::Result<InfoResponse> {

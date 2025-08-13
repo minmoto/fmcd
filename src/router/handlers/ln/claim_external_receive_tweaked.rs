@@ -1,11 +1,11 @@
-use crate::multimint::fedimint_client::ClientHandleArc;
-use crate::multimint::fedimint_core::config::FederationId;
-use crate::multimint::fedimint_core::secp256k1::{KeyPair, Secp256k1, SecretKey};
-use crate::multimint::fedimint_ln_client::{LightningClientModule, LnReceiveState};
 use anyhow::anyhow;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
+use fedimint_client::ClientHandleArc;
+use fedimint_core::config::FederationId;
+use fedimint_core::secp256k1::{KeyPair, Secp256k1, SecretKey};
+use fedimint_ln_client::{LightningClientModule, LnReceiveState};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};

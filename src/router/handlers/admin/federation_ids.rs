@@ -1,12 +1,12 @@
-use crate::multimint::fedimint_core::config::FederationId;
-use crate::multimint::MultiMint;
 use anyhow::Error;
 use axum::extract::State;
 use axum::Json;
+use fedimint_core::config::FederationId;
 use serde::Serialize;
 use serde_json::{json, Value};
 
 use crate::error::AppError;
+use crate::multimint::MultiMint;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize)]

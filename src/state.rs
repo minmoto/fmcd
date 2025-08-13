@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
-use crate::multimint::fedimint_client::ClientHandleArc;
-use crate::multimint::fedimint_core::config::{FederationId, FederationIdPrefix};
-use crate::multimint::MultiMint;
 use anyhow::{anyhow, Result};
 use axum::http::StatusCode;
+use fedimint_client::ClientHandleArc;
+use fedimint_core::config::{FederationId, FederationIdPrefix};
 
 use crate::error::AppError;
+use crate::multimint::MultiMint;
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub multimint: MultiMint,

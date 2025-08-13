@@ -1,8 +1,10 @@
 # FMCD: A Fedimint Client for Server Side Applications
 
-`fmcd` runs a fedimint client with Ecash, Lightning, and Onchain modules to let a server side application hold and use Bitcoin with Fedimint. It exposes a REST API & provides wrappers in typescript, python, golang, and elixir. It uses the `multimint` crate to manage clients connected to multiple Federations from a single `fmcd` instance.
+> This project is an incompatible fork of [Fedimint Clientd](https://github.com/fedimint/fedimint-clientd)
 
-This project is intended to be an easy-to-use starting point for those interested in adding Fedimint client support to their applications. fmcd only exposes Fedimint's default modules, and any more complex Fedimint integration will require custom implementation using [Fedimint's rust crates](https://github.com/fedimint/fedimint).
+Run a Fedimint client with Ecash, Lightning, and Onchain modules to let a server side application hold and use Bitcoin with Fedimint. `fmcd` exposes a REST and Websocket APIs, with ability to manage clients connected to multiple Federations from a single instance.
+
+This project is intended to be an easy-to-use starting point for those interested in adding Fedimint client support to their applications. `fmcd` only exposes Fedimint's default modules, and any more complex Fedimint integration will require custom implementation using [Fedimint's rust crates](https://github.com/fedimint/fedimint).
 
 ## Getting Started
 
@@ -20,11 +22,11 @@ fmcd \
   --invite-code="fed1-fedimint-invite-code"
 
 ENV USAGE:
-FEDIMINT_CLIENTD_DB_PATH=/absolute/path/to/dir/to/store/database
-FEDIMINT_CLIENTD_PASSWORD="some-secure-password-that-becomes-the-bearer-token"
-FEDIMINT_CLIENTD_ADDR="127.0.0.1:8080"
-FEDIMINT_CLIENTD_MODE="rest"
-FEDIMINT_CLIENTD_INVITE_CODE="fed1-fedimint-invite-code"
+FMCD_DB_PATH=/absolute/path/to/dir/to/store/database
+FMCD_PASSWORD="some-secure-password-that-becomes-the-bearer-token"
+FMCD_ADDR="127.0.0.1:8080"
+FMCD_MODE="rest"
+FMCD_INVITE_CODE="fed1-fedimint-invite-code"
 ```
 
 ## Fedimint Clientd Endpoints

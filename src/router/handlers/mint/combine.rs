@@ -1,7 +1,7 @@
-use crate::multimint::fedimint_mint_client::OOBNotes;
 use anyhow::anyhow;
 use axum::http::StatusCode;
 use axum::Json;
+use fedimint_mint_client::OOBNotes;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};

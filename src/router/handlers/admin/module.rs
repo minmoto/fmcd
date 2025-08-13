@@ -1,10 +1,10 @@
-use crate::multimint::fedimint_client::ClientHandleArc;
-use crate::multimint::fedimint_core::config::FederationId;
-use crate::multimint::fedimint_core::core::{ModuleInstanceId, ModuleKind};
 use anyhow::anyhow;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
+use fedimint_client::ClientHandleArc;
+use fedimint_core::config::FederationId;
+use fedimint_core::core::{ModuleInstanceId, ModuleKind};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use tracing::info;

@@ -1,12 +1,10 @@
 use std::str::FromStr;
 
-use crate::multimint::fedimint_client::ClientHandleArc;
-use crate::multimint::fedimint_core::Amount;
-use crate::multimint::fedimint_ln_client::{
-    InternalPayState, LightningClientModule, LnPayState, PayType,
-};
-use crate::multimint::fedimint_ln_common::lightning_invoice::Bolt11Invoice;
 use anyhow::{bail, Context};
+use fedimint_client::ClientHandleArc;
+use fedimint_core::Amount;
+use fedimint_ln_client::{InternalPayState, LightningClientModule, LnPayState, PayType};
+use fedimint_ln_common::lightning_invoice::Bolt11Invoice;
 use futures_util::StreamExt;
 use tracing::{debug, info};
 

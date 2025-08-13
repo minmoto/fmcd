@@ -23,7 +23,7 @@ use fedimint_mint_client::MintClientInit;
 use fedimint_wallet_client::WalletClientInit;
 use futures_util::StreamExt;
 
-use crate::db::{FederationConfig, FederationIdKey, FederationIdKeyPrefix};
+use super::db::{FederationConfig, FederationIdKey, FederationIdKeyPrefix};
 
 #[derive(Debug, Clone)]
 pub struct LocalClientBuilder {

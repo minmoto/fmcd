@@ -1,13 +1,13 @@
-use crate::multimint::fedimint_client::ClientHandleArc;
-use crate::multimint::fedimint_core::config::FederationId;
-use crate::multimint::fedimint_core::core::OperationId;
-use crate::multimint::fedimint_ln_common::bitcoin::Address;
-use crate::multimint::fedimint_wallet_client::client_db::TweakIdx;
-use crate::multimint::fedimint_wallet_client::WalletClientModule;
 use anyhow::anyhow;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
+use fedimint_client::ClientHandleArc;
+use fedimint_core::config::FederationId;
+use fedimint_core::core::OperationId;
+use fedimint_ln_common::bitcoin::Address;
+use fedimint_wallet_client::client_db::TweakIdx;
+use fedimint_wallet_client::WalletClientModule;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 

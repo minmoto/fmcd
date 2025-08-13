@@ -1,5 +1,7 @@
 # Shell environment that uses the flake's devShell
-{ pkgs ? import <nixpkgs> { } }:
+{
+  pkgs ? import <nixpkgs> { },
+}:
 let
   flake = builtins.getFlake (toString ./.);
   system = pkgs.system;
