@@ -1,7 +1,7 @@
 procs:
   user:
-    shell: zsh # if on macOS
-    # shell: bash # if on Linux
+    shell: bash # if on Linux
+    # shell: zsh # if on macOS
     stop: SIGKILL
   fmcd:
     shell: export RUST_BACKTRACE=1 && cargo run --manifest-path ./Cargo.toml
