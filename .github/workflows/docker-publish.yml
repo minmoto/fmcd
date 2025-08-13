@@ -1,0 +1,90 @@
+name: Docker Hub Publish
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    # Version tags are handled by docker-multiarch.yml
+    tags-ignore:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: ${{ secrets.DOCKER_HUB_USERNAME }}/fmcd
+
+jobs:
+  build-and-push:
+    # Skip this workflow if it's a version tag (handled by multi-arch workflow)
+    if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v11
+        with:
+          logger: pretty
+          extra-conf: |
+            experimental-features = nix-command flakes
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v4
+
+      - name: Build OCI container with Nix
+        run: |
+          nix build .#oci
+          echo "OCI_ARCHIVE=$(readlink -f result)" >> $GITHUB_ENV
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Load and push Docker image
+        if: github.event_name != 'pull_request'
+        run: |
+          # Load the OCI archive into Docker
+          docker load < ${{ env.OCI_ARCHIVE }}
+
+          # Get the image ID from the loaded image
+          IMAGE_ID=$(docker images --format "{{.ID}}" | head -n 1)
+
+          # Tag and push the image with all the generated tags
+          for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr '\n' ' '); do
+            echo "Tagging and pushing: $tag"
+            docker tag $IMAGE_ID $tag
+            docker push $tag
+          done
+
+      - name: Load Docker image (dry run for PRs)
+        if: github.event_name == 'pull_request'
+        run: |
+          # Just load the image to verify it builds correctly
+          docker load < ${{ env.OCI_ARCHIVE }}
+          docker images
+          echo "✅ OCI container built successfully (not pushed for PR)"

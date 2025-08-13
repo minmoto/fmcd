@@ -75,29 +75,55 @@ curl http://localhost:3333/v2/admin/info -H 'Authorization: Bearer some-secure-p
 - `/health`: health check endpoint.
 - `/metrics`: exports API metrics using opentelemetry with prometheus exporter (num requests, latency, high-level metrics only)
 
-## Fedimint Clientd on Docker
+## Docker Support
 
-Fedimint Clientd is not officially supported on Docker. However, you can build, publish and deploy your own docker image by following these steps:
+FMCD provides Docker images through automated GitHub Actions workflows that build OCI containers using Nix.
 
-- Build an OCI image
+### Using Pre-built Images
 
+Docker images are automatically published to Docker Hub for releases:
+
+```bash
+# Pull the latest stable release (multi-arch: linux/amd64, linux/arm64)
+docker pull okjodom/fmcd:latest
+
+# Pull a specific version
+docker pull okjodom/fmcd:1.2.3
+
+# Run the container
+docker run -d \
+  -e FMCD_DB_PATH=/data \
+  -e FMCD_PASSWORD="your-secure-password" \
+  -e FMCD_ADDR="0.0.0.0:8080" \
+  -v fmcd-data:/data \
+  -p 8080:8080 \
+  okjodom/fmcd:latest
 ```
-nix build .#fmcd-oci && docker load < ./result
+
+### Building Locally
+
+Build your own OCI image using Nix:
+
+```bash
+# Build the OCI container
+nix build .#oci
+
+# Load into Docker
+docker load < ./result
+
+# Verify the image
+docker image ls | grep fmcd
+
+# Tag and push to your registry
+docker tag fmcd:latest <your-registry>/fmcd:v0.4.0
+docker push <your-registry>/fmcd:v0.4.0
 ```
 
-- confirm the image is built and loaded in your local docker registry
+### Automated Publishing
 
-```
-docker image ls
+This repository uses GitHub Actions to automatically build and publish Docker images:
 
-# REPOSITORY          TAG                                IMAGE ID       CREATED        SIZE
-# fmcd    f4cb5pgsw4sn7mg93xwyvx09ib4qg3rd   ff8cf0f0805b   54 years ago   91.1MB1.1GB
-# ...
-```
+- **Development builds** (single-arch, AMD64): Triggered on pushes to main/master
+- **Production releases** (multi-arch, AMD64 + ARM64): Triggered on version tags (v*)
 
-- Tag the image image appropriately then publish to your preferred registry
-
-```
-docker tag fmcd <registry>/fmcd:v0.4.0
-docker push <registry>/fmcd:v0.4.0
-```
+See [.github/workflows/README.md](.github/workflows/README.md) for detailed workflow documentation.
