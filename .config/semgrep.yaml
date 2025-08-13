@@ -4,11 +4,27 @@ rules:
     message: "Found use of unwrap(). Consider using more robust error handling."
     languages: [rust]
     severity: WARNING
+    paths:
+      exclude:
+        - "**/tests/**"
+        - "**/*_test.rs"
+        - "**/*_tests.rs"
+        - "**/test_*.rs"
+        - "src/**/tests.rs"
+        - "src/**/*_tests.rs"
   - id: use-of-expect
     pattern: $X.expect(...)
     message: "Found use of expect(). Consider providing clearer error messages or using more robust error handling."
     languages: [rust]
     severity: WARNING
+    paths:
+      exclude:
+        - "**/tests/**"
+        - "**/*_test.rs"
+        - "**/*_tests.rs"
+        - "**/test_*.rs"
+        - "src/**/tests.rs"
+        - "src/**/*_tests.rs"
   - id: direct-panic
     pattern: panic!(...)
     message: "Direct use of panic!(). Consider if there's a more graceful way to handle this error case."

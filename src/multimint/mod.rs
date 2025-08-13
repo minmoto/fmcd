@@ -81,6 +81,9 @@ use tracing::{info, warn};
 pub mod client;
 pub mod db;
 
+#[cfg(test)]
+mod tests;
+
 use self::client::LocalClientBuilder;
 use self::db::FederationConfig;
 
