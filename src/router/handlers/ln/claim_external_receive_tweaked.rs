@@ -4,7 +4,7 @@ use axum::http::StatusCode;
 use axum::Json;
 use fedimint_client::ClientHandleArc;
 use fedimint_core::config::FederationId;
-use fedimint_core::secp256k1::{KeyPair, Secp256k1, SecretKey};
+use fedimint_core::secp256k1::{Keypair, Secp256k1, SecretKey};
 use fedimint_ln_client::{LightningClientModule, LnReceiveState};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -28,13 +28,14 @@ pub struct ClaimExternalReceiveTweakedResponse {
     pub status: LnReceiveState,
 }
 
+#[allow(deprecated)] // TODO: Migrate to recurring payment functionality in future update
 async fn _await_claim_external_receive_tweaked(
     client: ClientHandleArc,
     req: ClaimExternalReceiveTweakedRequest,
 ) -> Result<ClaimExternalReceiveTweakedResponse, AppError> {
     let secp = Secp256k1::new();
-    let key_pair = KeyPair::from_secret_key(&secp, &req.private_key);
-    let lightning_module = &client.get_first_module::<LightningClientModule>();
+    let key_pair = Keypair::from_secret_key(&secp, &req.private_key);
+    let lightning_module = &client.get_first_module::<LightningClientModule>()?;
     let operation_id = lightning_module
         .scan_receive_for_user_tweaked(key_pair, req.tweaks, ())
         .await;

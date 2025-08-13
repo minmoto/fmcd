@@ -33,12 +33,12 @@ async fn _split(req: SplitRequest) -> Result<SplitResponse, AppError> {
                 .map(|note| {
                     OOBNotes::new(
                         federation,
-                        TieredMulti::new(vec![(*amount, vec![*note])].into_iter().collect()),
+                        TieredMulti::new(vec![(amount, vec![*note])].into_iter().collect()),
                     )
                 })
                 .collect::<Vec<_>>();
-            (*amount, notes[0].clone()) // clone the amount and return a single
-                                        // OOBNotes
+            (amount, notes[0].clone()) // clone the amount and return a single
+                                       // OOBNotes
         })
         .collect::<BTreeMap<_, _>>();
 

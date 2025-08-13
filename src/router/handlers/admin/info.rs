@@ -28,17 +28,10 @@ async fn _info(multimint: MultiMint) -> Result<HashMap<FederationId, InfoRespons
     let mut info = HashMap::new();
 
     for (id, client) in multimint.clients.lock().await.iter() {
-        let mint_client = client.get_first_module::<MintClientModule>();
-        let wallet_client = client.get_first_module::<WalletClientModule>();
-        let summary = mint_client
-            .get_wallet_summary(
-                &mut client
-                    .db()
-                    .begin_transaction_nc()
-                    .await
-                    .to_ref_with_prefix_module_id(1),
-            )
-            .await;
+        let mint_client = client.get_first_module::<MintClientModule>()?;
+        let wallet_client = client.get_first_module::<WalletClientModule>()?;
+        let mut dbtx = client.db().begin_transaction_nc().await;
+        let summary = mint_client.get_note_counts_by_denomination(&mut dbtx).await;
 
         info.insert(
             *id,

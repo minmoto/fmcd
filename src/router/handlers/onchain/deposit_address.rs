@@ -29,7 +29,7 @@ pub struct DepositAddressResponse {
 }
 
 async fn _deposit_address(client: ClientHandleArc) -> Result<DepositAddressResponse, AppError> {
-    let wallet_module = client.get_first_module::<WalletClientModule>();
+    let wallet_module = client.get_first_module::<WalletClientModule>()?;
     let (operation_id, address, tweak_idx) = wallet_module
         .allocate_deposit_address_expert_only(())
         .await?;

@@ -31,7 +31,7 @@ async fn _reissue(
 ) -> Result<ReissueResponse, AppError> {
     let amount_msat = req.notes.total_amount();
 
-    let mint = client.get_first_module::<MintClientModule>();
+    let mint = client.get_first_module::<MintClientModule>()?;
 
     let operation_id = mint.reissue_external_notes(req.notes, ()).await?;
     let mut updates = mint

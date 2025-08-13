@@ -31,7 +31,7 @@ async fn _await_invoice(
     client: ClientHandleArc,
     req: AwaitInvoiceRequest,
 ) -> Result<AwaitInvoiceResponse, AppError> {
-    let lightning_module = &client.get_first_module::<LightningClientModule>();
+    let lightning_module = &client.get_first_module::<LightningClientModule>()?;
     let mut updates = lightning_module
         .subscribe_ln_receive(req.operation_id)
         .await?

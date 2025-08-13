@@ -2,16 +2,16 @@
   description = "A fedimint client daemon for server side applications to hold, use, and manage Bitcoin and ecash";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-24.05";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.05";
 
     flakebox = {
-      url = "github:rustshop/flakebox?rev=ee39d59b2c3779e5827f8fa2d269610c556c04c8";
+      url = "github:rustshop/flakebox?rev=f90159e9c8e28a8a12e8d8673e37e80ef1a10c08";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     flake-utils.url = "github:numtide/flake-utils";
 
-    fedimint.url = "github:fedimint/fedimint?ref=v0.4.2";
+    fedimint.url = "github:fedimint/fedimint?ref=v0.8.0";
   };
 
   outputs =
@@ -27,7 +27,6 @@
       let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = fedimint.overlays.fedimint;
         };
 
         lib = pkgs.lib;
@@ -50,8 +49,7 @@
         # Build configuration
         commonArgs = {
           buildInputs =
-            [ ]
-            ++ lib.optionals pkgs.stdenv.isDarwin [ pkgs.darwin.apple_sdk.frameworks.SystemConfiguration ];
+            [ ] ++ lib.optionals pkgs.stdenv.isDarwin [ pkgs.darwin.apple_sdk.frameworks.SystemConfiguration ];
           nativeBuildInputs = [ pkgs.pkg-config ];
         };
 
@@ -65,6 +63,8 @@
             "rust-analyzer"
             "rust-src"
           ];
+          # Use latest stable Rust to support edition2024
+          channel = "stable";
         };
 
         toolchainsStd = flakeboxLib.mkStdFenixToolchains toolchainArgs;
@@ -104,34 +104,28 @@
           oci = outputs.fmcd-oci;
         };
 
-        devShells = flakeboxLib.mkShells {
-          packages = [ ];
-          buildInputs = commonArgs.buildInputs ++ [ pkgs.glibcLocales ];
-          nativeBuildInputs =
-            with pkgs;
-            [
-              mprocs
-              bitcoind
-              clightning
-              lnd
-              esplora-electrs
-              electrs
-              pkg-config
-              perl
-            ]
-            ++ [
-              fedimint.packages.${system}.devimint
-              fedimint.packages.${system}.gateway-pkgs
-              fedimint.packages.${system}.fedimint-pkgs
+        devShells = {
+          default = flakeboxLib.mkDevShell {
+            buildInputs = commonArgs.buildInputs ++ [ pkgs.glibcLocales ];
+            nativeBuildInputs = commonArgs.nativeBuildInputs ++ [
+              # Build tools
+              pkgs.perl
+              pkgs.clang
+              pkgs.llvmPackages.libclang
+
+              # Development tools
+              pkgs.mprocs
             ];
-          shellHook = ''
-            export RUSTFLAGS="--cfg tokio_unstable"
-            export RUSTDOCFLAGS="--cfg tokio_unstable"
-            export RUST_LOG="info"
-            export LOCALE_ARCHIVE="${pkgs.glibcLocales}/lib/locale/locale-archive"
-            export LANG="en_US.UTF-8"
-            export LC_ALL="en_US.UTF-8"
-          '';
+            shellHook = ''
+              export RUSTFLAGS="--cfg tokio_unstable"
+              export RUSTDOCFLAGS="--cfg tokio_unstable"
+              export RUST_LOG="info"
+              export LOCALE_ARCHIVE="${pkgs.glibcLocales}/lib/locale/locale-archive"
+              export LANG="en_US.UTF-8"
+              export LC_ALL="en_US.UTF-8"
+              export LIBCLANG_PATH="${pkgs.llvmPackages.libclang.lib}/lib"
+            '';
+          };
         };
       }
     );

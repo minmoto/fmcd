@@ -3,11 +3,10 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 use bitcoin::address::NetworkUnchecked;
-use bitcoin::{Amount, Txid};
+use bitcoin::{Address, Amount, Txid};
 use fedimint_client::ClientHandleArc;
 use fedimint_core::config::FederationId;
 use fedimint_core::BitcoinAmountOrAll;
-use fedimint_ln_common::bitcoin::Address;
 use fedimint_wallet_client::{WalletClientModule, WithdrawState};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -36,14 +35,14 @@ async fn _withdraw(
     client: ClientHandleArc,
     req: WithdrawRequest,
 ) -> Result<WithdrawResponse, AppError> {
-    let wallet_module = client.get_first_module::<WalletClientModule>();
+    let wallet_module = client.get_first_module::<WalletClientModule>()?;
     let (amount, fees) = match req.amount_sat {
         // If the amount is "all", then we need to subtract the fees from
         // the amount we are withdrawing
         BitcoinAmountOrAll::All => {
             let balance = Amount::from_sat(client.get_balance().await.msats / 1000);
             let fees = wallet_module
-                .get_withdraw_fees(req.address.clone(), balance)
+                .get_withdraw_fees(&req.address.clone().assume_checked(), balance)
                 .await?;
             let amount = balance.checked_sub(fees.amount());
             let amount = match amount {
@@ -61,7 +60,7 @@ async fn _withdraw(
         BitcoinAmountOrAll::Amount(amount) => (
             amount,
             wallet_module
-                .get_withdraw_fees(req.address.clone(), amount)
+                .get_withdraw_fees(&req.address.clone().assume_checked(), amount)
                 .await?,
         ),
     };
@@ -70,7 +69,7 @@ async fn _withdraw(
     info!("Attempting withdraw with fees: {fees:?}");
 
     let operation_id = wallet_module
-        .withdraw(req.address, amount, fees, ())
+        .withdraw(&req.address.assume_checked(), amount, fees, ())
         .await?;
 
     let mut updates = wallet_module

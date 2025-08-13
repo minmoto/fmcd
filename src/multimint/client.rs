@@ -9,15 +9,14 @@ use anyhow::Result;
 use bip39::Mnemonic;
 use fedimint_bip39::Bip39RootSecretStrategy;
 use fedimint_client::db::ClientConfigKey;
-use fedimint_client::derivable_secret::{ChildId, DerivableSecret};
-use fedimint_client::module::init::ClientModuleInitRegistry;
 use fedimint_client::secret::RootSecretStrategy;
-use fedimint_client::{Client, ClientBuilder};
+use fedimint_client::{Client, ClientBuilder, RootSecret};
 use fedimint_core::config::FederationId;
 use fedimint_core::db::{
     Committable, Database, DatabaseTransaction, IDatabaseTransactionOpsCoreTyped,
 };
 use fedimint_core::encoding::Encodable;
+use fedimint_derive_secret::{ChildId, DerivableSecret};
 use fedimint_ln_client::LightningClientInit;
 use fedimint_mint_client::MintClientInit;
 use fedimint_wallet_client::WalletClientInit;
@@ -52,13 +51,10 @@ impl LocalClientBuilder {
         let client_builder = self.create_client_builder(db.clone()).await?;
 
         let client_res = if Client::is_initialized(&db).await {
-            client_builder.open(secret).await
+            client_builder.open(RootSecret::Custom(secret)).await
         } else {
-            let client_config =
-                fedimint_api_client::download_from_invite_code(&config.invite_code).await?;
-            client_builder
-                .join(secret, client_config.to_owned(), None)
-                .await
+            let client_preview = client_builder.preview(&config.invite_code).await?;
+            client_preview.join(RootSecret::Custom(secret)).await
         }?;
 
         Ok(Arc::new(client_res))
@@ -110,13 +106,11 @@ impl LocalClientBuilder {
     /// Constructs the client builder with the modules, database, and connector
     /// used to create clients for connected federations.
     async fn create_client_builder(&self, db: Database) -> Result<ClientBuilder> {
-        let mut registry = ClientModuleInitRegistry::new();
-        registry.attach(WalletClientInit::default());
-        registry.attach(MintClientInit);
-        registry.attach(LightningClientInit::default());
         let mut client_builder = Client::builder(db).await?;
-        client_builder.with_module_inits(registry);
-        client_builder.with_primary_module(1);
+        client_builder.with_module(WalletClientInit::default());
+        client_builder.with_module(MintClientInit);
+        client_builder.with_module(LightningClientInit::default());
+        // Primary module is set automatically based on federation config
         Ok(client_builder)
     }
 }
