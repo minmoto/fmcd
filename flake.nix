@@ -106,7 +106,7 @@
 
         devShells = flakeboxLib.mkShells {
           packages = [ ];
-          buildInputs = commonArgs.buildInputs;
+          buildInputs = commonArgs.buildInputs ++ [ pkgs.glibcLocales ];
           nativeBuildInputs =
             with pkgs;
             [
@@ -117,6 +117,7 @@
               esplora-electrs
               electrs
               pkg-config
+              perl
             ]
             ++ [
               fedimint.packages.${system}.devimint
@@ -127,6 +128,9 @@
             export RUSTFLAGS="--cfg tokio_unstable"
             export RUSTDOCFLAGS="--cfg tokio_unstable"
             export RUST_LOG="info"
+            export LOCALE_ARCHIVE="${pkgs.glibcLocales}/lib/locale/locale-archive"
+            export LANG="en_US.UTF-8"
+            export LC_ALL="en_US.UTF-8"
           '';
         };
       }

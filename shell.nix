@@ -13,5 +13,13 @@ flake.devShells.${system}.default or pkgs.mkShell {
     pkg-config
     openssl
     clang
+    glibcLocales
+    perl
   ];
+
+  shellHook = ''
+    export LOCALE_ARCHIVE="${pkgs.glibcLocales}/lib/locale/locale-archive"
+    export LANG="en_US.UTF-8"
+    export LC_ALL="en_US.UTF-8"
+  '';
 }
