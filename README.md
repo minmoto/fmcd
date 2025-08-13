@@ -29,13 +29,28 @@ FMCD_MODE="rest"
 FMCD_INVITE_CODE="fed1-fedimint-invite-code"
 ```
 
+## Authentication
+
+`fmcd` uses HTTP Basic Authentication (similar to phoenixd) with:
+- Username: `fmcd` (fixed)
+- Password: Auto-generated on first run or set via `FMCD_PASSWORD`
+
+The password is stored in the configuration file (`fmcd.conf`) and persists across restarts.
+
+### Example API Request
+
+```bash
+# Using Basic Auth with curl
+curl -u fmcd:your-password http://localhost:7070/v2/admin/info
+
+# Or with Authorization header
+curl http://localhost:7070/v2/admin/info \
+  -H "Authorization: Basic $(echo -n fmcd:your-password | base64)"
+```
+
 ## Fedimint Clientd Endpoints
 
-`fmcd` supports the following endpoints (and has naive websocket support at `/v2/ws`, see code for details until I improve the interface. PRs welcome!). All the endpoints are authed with a Bearer token from the password (from CLI or env). You can hit the endpoints as such with curl:
-
-```
-curl http://localhost:3333/v2/admin/info -H 'Authorization: Bearer some-secure-password-that-becomes-the-bearer-token'
-```
+`fmcd` supports the following endpoints (and has WebSocket support at `/v2/ws`). Metrics are available at `/metrics` on the same port.
 
 ### Admin related commands:
 
@@ -92,12 +107,92 @@ docker pull okjodom/fmcd:1.2.3
 
 # Run the container
 docker run -d \
-  -e FMCD_DB_PATH=/data \
-  -e FMCD_PASSWORD="your-secure-password" \
-  -e FMCD_ADDR="0.0.0.0:8080" \
+  -e FMCD_CONFIG=/data/fmcd.conf \
+  -e FMCD_DB_PATH=/data/db \
+  -e FMCD_ADDR="0.0.0.0:7070" \
   -v fmcd-data:/data \
-  -p 8080:8080 \
+  -p 7070:7070 \
   okjodom/fmcd:latest
+```
+
+### Docker Compose Example
+
+Create a `docker-compose.yml` file with the following content for a complete deployment:
+
+```yaml
+services:
+  fmcd:
+    image: okjodom/fmcd:latest  # Or use locally built: fmcd:latest
+    container_name: fmcd
+    restart: unless-stopped
+
+    volumes:
+      - fmcd-data:/data  # Persistent volume for config and database
+
+    ports:
+      - "7070:7070"  # HTTP API, WebSocket, and Metrics (/metrics endpoint)
+
+    environment:
+      # Required: Configuration paths
+      FMCD_CONFIG: /data/fmcd.conf
+      FMCD_DB_PATH: /data/db
+      FMCD_DATA_DIR: /data
+
+      # Required: Server binding (use 0.0.0.0 for Docker)
+      FMCD_ADDR: "0.0.0.0:7070"
+
+      # Optional: Federation invite code (join on startup)
+      # FMCD_INVITE_CODE: "fed11qgqrgvnhwden5te0v9k8q6rp9ekh2arfdeukuet595cr2ttpd3jhq6rzve6zuer9wchxvetyd938gcewvdhk6tcqqysptkuvknc7erjgf4em3zfh90kffqf9srujn6q53d6r056e4apze5cw27h75"
+
+      # Optional: Set custom password (otherwise auto-generated on first run)
+      # FMCD_PASSWORD: "your-secure-password"
+
+      # Optional: Disable authentication (development only!)
+      # FMCD_NO_AUTH: "true"
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7070/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  fmcd-data:
+    driver: local
+```
+
+#### Running with Docker Compose
+
+```bash
+# Start the service
+docker-compose up -d
+
+# View logs
+docker-compose logs -f fmcd
+
+# Get the auto-generated password (first run only)
+docker exec fmcd cat /data/fmcd.conf | grep http-password
+
+# Stop the service
+docker-compose down
+```
+
+### Password Management
+
+On first run, fmcd automatically:
+1. Creates `/data/fmcd.conf` with default settings
+2. Generates a secure 64-character hex password
+3. Displays "Generating default api password...done" in logs
+4. Saves the password to the config file in the volume
+
+To retrieve the auto-generated password:
+```bash
+# From a running container
+docker exec fmcd cat /data/fmcd.conf | grep http-password
+
+# Or check the initial logs
+docker logs fmcd | grep "Generating"
 ```
 
 ### Building Locally

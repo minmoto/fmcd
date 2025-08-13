@@ -1,13 +1,21 @@
 [package]
 name = "fmcd"
 description = "A fedimint client daemon for server side applications to hold, use, and manage Bitcoin"
-version = "0.4.0"
+version = "0.1.0"
 edition = "2021"
 repository = "https://github.com/minmoto/fmcd"
 keywords = ["fedimint", "bitcoin", "lightning", "ecash"]
 license = "MIT"
 readme = "README.md"
 authors = ["Minmo Developers"]
+
+[lib]
+name = "fmcd"
+path = "src/lib.rs"
+
+[[bin]]
+name = "fmcd"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.75"
@@ -34,7 +42,6 @@ time = { version = "0.3.25", features = ["formatting"] }
 chrono = "0.4.31"
 futures-util = "0.3.30"
 clap = { version = "3", features = ["derive", "env"] }
-# Dependencies from multimint
 fedimint-api-client = "0.8.0"
 fedimint-client = "0.8.0"
 fedimint-core = "0.8.0"
@@ -48,10 +55,15 @@ fedimint-derive-secret = "0.8.0"
 rand = "0.8.5"
 bip39 = "2.1.0"
 hex = "0.4.3"
+base64 = "0.21"
+hmac = "0.12"
+sha2 = "0.10"
+toml = "0.8"
 
 futures = "0.3"
 metrics = { version = "0.23", default-features = false }
 metrics-exporter-prometheus = { version = "0.15.3", default-features = false }
+console = "0.15"
 
 [dev-dependencies]
 tempfile = "3.8"
