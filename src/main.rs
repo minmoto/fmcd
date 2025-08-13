@@ -63,17 +63,13 @@ enum Commands {
 #[derive(Parser)]
 #[clap(version = "1.0", author = "Kody Low")]
 struct Cli {
-    /// Configuration file path
-    #[clap(long, env = "FMCD_CONFIG", default_value = "fmcd.conf")]
-    config: PathBuf,
+    /// Data directory path (contains config and database)
+    #[clap(long, env = "FMCD_DATA_DIR", default_value = ".")]
+    data_dir: PathBuf,
 
     /// Federation invite code (overrides config)
     #[clap(long, env = "FMCD_INVITE_CODE")]
     invite_code: Option<String>,
-
-    /// Path to FM database (overrides config)
-    #[clap(long, env = "FMCD_DB_PATH")]
-    db_path: Option<PathBuf>,
 
     /// Password (overrides config)
     #[clap(long, env = "FMCD_PASSWORD")]
@@ -105,9 +101,15 @@ async fn main() -> Result<()> {
 
     let cli: Cli = Cli::parse();
 
+    // Ensure data directory exists
+    std::fs::create_dir_all(&cli.data_dir)?;
+
+    // Config file is always in data_dir
+    let config_path = cli.data_dir.join("fmcd.conf");
+
     // Load or create configuration file with automatic password generation
     let term = Term::stdout();
-    let (mut config, password_generated) = Config::load_or_create(&cli.config)?;
+    let (mut config, password_generated) = Config::load_or_create(&config_path)?;
 
     if password_generated {
         term.write_line(&format!(
@@ -121,9 +123,8 @@ async fn main() -> Result<()> {
     if let Some(invite_code) = cli.invite_code {
         config.invite_code = Some(invite_code);
     }
-    if let Some(db_path) = cli.db_path {
-        config.db_path = Some(db_path);
-    }
+    // Update config's data_dir to match CLI
+    config.data_dir = Some(cli.data_dir.clone());
     if let Some(password) = cli.password {
         config.http_password = Some(password);
     }
@@ -143,11 +144,8 @@ async fn main() -> Result<()> {
         config.http_password = None;
     }
 
-    // Determine database path
-    let db_path = config
-        .db_path
-        .clone()
-        .ok_or_else(|| anyhow::anyhow!("Database path must be specified in config or CLI"))?;
+    // Database path is always the data directory
+    let db_path = cli.data_dir.clone();
 
     let mut state = AppState::new(db_path).await?;
 

@@ -10,19 +10,19 @@ This project is intended to be an easy-to-use starting point for those intereste
 
 You can install the cli app with `cargo install fmcd` or by cloning the repo and running `cargo build --release` in the root directory.
 
-`fmcd` runs from the command line and takes a few arguments, which are also available as environment variables. Fedimint uses rocksDB, an embedded key-value store, to store its state. The `--fm_db_path` argument is required and should be an absolute path to a directory where the database will be stored.
+`fmcd` runs from the command line and takes a few arguments, which are also available as environment variables. The `--data-dir` argument specifies where both the configuration file (`fmcd.conf`) and the database will be stored. Fedimint uses rocksDB, an embedded key-value store, to store its state.
 
 ```
 CLI USAGE:
 fmcd \
-  --db-path=/absolute/path/to/dir/to/store/database \
+  --data-dir=/path/to/data/directory \
   --password="some-secure-password-that-becomes-the-bearer-token" \
   --addr="127.0.0.1:8080"
   --mode="rest"
   --invite-code="fed1-fedimint-invite-code"
 
 ENV USAGE:
-FMCD_DB_PATH=/absolute/path/to/dir/to/store/database
+FMCD_DATA_DIR=/path/to/data/directory
 FMCD_PASSWORD="some-secure-password-that-becomes-the-bearer-token"
 FMCD_ADDR="127.0.0.1:8080"
 FMCD_MODE="rest"
@@ -35,7 +35,7 @@ FMCD_INVITE_CODE="fed1-fedimint-invite-code"
 - Username: `fmcd` (fixed)
 - Password: Auto-generated on first run or set via `FMCD_PASSWORD`
 
-The password is stored in the configuration file (`fmcd.conf`) and persists across restarts.
+The password is stored in the configuration file (`fmcd.conf`) inside the data directory and persists across restarts.
 
 ### Example API Request
 
@@ -107,8 +107,7 @@ docker pull okjodom/fmcd:1.2.3
 
 # Run the container
 docker run -d \
-  -e FMCD_CONFIG=/data/fmcd.conf \
-  -e FMCD_DB_PATH=/data/db \
+  -e FMCD_DATA_DIR=/data \
   -e FMCD_ADDR="0.0.0.0:7070" \
   -v fmcd-data:/data \
   -p 7070:7070 \
@@ -133,9 +132,7 @@ services:
       - "7070:7070"  # HTTP API, WebSocket, and Metrics (/metrics endpoint)
 
     environment:
-      # Required: Configuration paths
-      FMCD_CONFIG: /data/fmcd.conf
-      FMCD_DB_PATH: /data/db
+      # Required: Data directory (contains config and database)
       FMCD_DATA_DIR: /data
 
       # Required: Server binding (use 0.0.0.0 for Docker)

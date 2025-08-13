@@ -29,17 +29,13 @@ pub struct Config {
     #[serde(rename = "websocket-port")]
     pub websocket_port: Option<u16>,
 
-    /// Data directory for the daemon
+    /// Data directory for the daemon (contains database and config)
     #[serde(rename = "data-dir")]
     pub data_dir: Option<PathBuf>,
 
     /// Federation invite code
     #[serde(rename = "invite-code")]
     pub invite_code: Option<String>,
-
-    /// Database path
-    #[serde(rename = "db-path")]
-    pub db_path: Option<PathBuf>,
 
     /// Manual secret for additional security
     #[serde(rename = "manual-secret")]
@@ -56,7 +52,6 @@ impl Default for Config {
             websocket_port: None,
             data_dir: None,
             invite_code: None,
-            db_path: None,
             manual_secret: None,
         }
     }

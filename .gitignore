@@ -2,18 +2,17 @@
 /target-nix
 /.direnv
 .env
-fm_client_db
 .cargo
 .vscode
 .DS_Store
-fm_db
-fm_db_dir
-fm_db_mnemonic
 result
 /vendor
 
-federations.txt
-work_dir
+# Data directories
+fmcd-data/
+fmcd.conf
+*.db
+*.db-*
 
 CLAUDE.md
 .claude/
