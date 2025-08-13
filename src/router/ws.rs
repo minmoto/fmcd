@@ -42,7 +42,7 @@ pub struct JsonRpcResponse {
     pub jsonrpc: String,
     pub result: Option<Value>,
     pub error: Option<JsonRpcError>,
-    pub id: u64,
+    pub id: Option<u64>, // Nullable to handle auth errors and notifications
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -154,7 +154,7 @@ fn create_json_rpc_response(res: Result<Value, AppError>, req_id: u64) -> JsonRp
             jsonrpc: JSONRPC_VERSION.to_string(),
             result: Some(res),
             error: None,
-            id: req_id,
+            id: Some(req_id),
         },
         Err(e) => JsonRpcResponse {
             jsonrpc: JSONRPC_VERSION.to_string(),
@@ -163,7 +163,7 @@ fn create_json_rpc_response(res: Result<Value, AppError>, req_id: u64) -> JsonRp
                 code: e.status.as_u16() as i16,
                 message: e.error.to_string(),
             }),
-            id: req_id,
+            id: Some(req_id),
         },
     }
 }
@@ -186,7 +186,7 @@ async fn send_err_invalid_req(
             code: JSONRPC_ERROR_INVALID_REQUEST,
             message: err.to_string(),
         }),
-        id: id.unwrap_or(0),
+        id, // Will be None if ID couldn't be extracted
     };
     socket
         .send(Message::Text(serde_json::to_string(&err_msg)?))
@@ -204,7 +204,7 @@ async fn send_auth_error(socket: &mut WebSocket, message: &str) -> Result<(), an
             code: -32001, // Custom authentication error code
             message: message.to_string(),
         }),
-        id: 0, // No ID available for auth errors
+        id: None, // No ID available for auth errors as they occur before parsing
     };
     socket
         .send(Message::Text(serde_json::to_string(&err_msg)?))
