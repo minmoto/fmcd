@@ -32,14 +32,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@v11
+        uses: DeterminateSystems/nix-installer-action@v14
         with:
           logger: pretty
           extra-conf: |
             experimental-features = nix-command flakes
+            connect-timeout = 300
+            stalled-download-timeout = 300
 
       - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@v4
+        uses: DeterminateSystems/magic-nix-cache-action@v8
 
       - name: Build OCI container with Nix
         run: |
