@@ -12,7 +12,7 @@ default:
 
 
 # run `cargo build` on everything
-build *ARGS="--workspace --all-targets":
+build *ARGS="--all-targets":
   #!/usr/bin/env bash
   set -euo pipefail
   if [ ! -f Cargo.toml ]; then
@@ -22,7 +22,7 @@ build *ARGS="--workspace --all-targets":
 
 
 # run `cargo check` on everything
-check *ARGS="--workspace --all-targets":
+check *ARGS="--all-targets":
   #!/usr/bin/env bash
   set -euo pipefail
   if [ ! -f Cargo.toml ]; then
@@ -80,11 +80,11 @@ watch *ARGS="-x run":
 
 
 # run `cargo clippy` on everything
-clippy *ARGS="--locked --offline --workspace --all-targets":
+clippy *ARGS="--locked --offline --all-targets":
   cargo clippy {{ARGS}} -- --deny warnings --allow deprecated
 
 # run `cargo clippy --fix` on everything
-clippy-fix *ARGS="--locked --offline --workspace --all-targets":
+clippy-fix *ARGS="--locked --offline --all-targets":
   cargo clippy {{ARGS}} --fix
 
 
