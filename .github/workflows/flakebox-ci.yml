@@ -7,9 +7,13 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install Nix
-      uses: DeterminateSystems/nix-installer-action@v4
+      uses: DeterminateSystems/nix-installer-action@v14
+      with:
+        extra-conf: |
+          connect-timeout = 300
+          stalled-download-timeout = 300
     - name: Magic Nix Cache
-      uses: DeterminateSystems/magic-nix-cache-action@v2
+      uses: DeterminateSystems/magic-nix-cache-action@v8
     - name: Build on ${{ matrix.host }}
       run: 'nix flake check -L .#
 
@@ -38,9 +42,13 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install Nix
-      uses: DeterminateSystems/nix-installer-action@v4
+      uses: DeterminateSystems/nix-installer-action@v14
+      with:
+        extra-conf: |
+          connect-timeout = 300
+          stalled-download-timeout = 300
     - name: Magic Nix Cache
-      uses: DeterminateSystems/magic-nix-cache-action@v2
+      uses: DeterminateSystems/magic-nix-cache-action@v8
     - name: Cargo Cache
       uses: actions/cache@v3
       with:
