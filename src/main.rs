@@ -10,7 +10,6 @@ use axum::middleware::{self, Next};
 use axum::response::IntoResponse;
 use fedimint_core::invite_code::InviteCode;
 use futures::future::TryFutureExt;
-use futures::try_join;
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 use router::handlers::{admin, ln, mint, onchain};
 use router::ws::websocket_handler;
@@ -18,6 +17,8 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
+mod auth;
+mod config;
 mod multimint;
 
 mod error;
@@ -25,12 +26,15 @@ mod router;
 mod state;
 mod utils;
 
+use std::sync::Arc;
+
+use auth::{basic_auth_middleware, BasicAuth, WebSocketAuth};
 use axum::routing::{get, post};
 use axum::Router;
 use clap::{Parser, Subcommand, ValueEnum};
+use config::Config;
+use console::{style, Term};
 use state::AppState;
-// use tower_http::cors::{Any, CorsLayer};
-use tower_http::validate_request::ValidateRequestHeaderLayer;
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 enum Mode {
@@ -59,33 +63,37 @@ enum Commands {
 #[derive(Parser)]
 #[clap(version = "1.0", author = "Kody Low")]
 struct Cli {
-    /// Federation invite code
-    #[clap(long, env = "FMCD_INVITE_CODE", required = false)]
-    invite_code: String,
+    /// Configuration file path
+    #[clap(long, env = "FMCD_CONFIG", default_value = "fmcd.conf")]
+    config: PathBuf,
 
-    /// Path to FM database
-    #[clap(long, env = "FMCD_DB_PATH", required = true)]
-    db_path: PathBuf,
+    /// Federation invite code (overrides config)
+    #[clap(long, env = "FMCD_INVITE_CODE")]
+    invite_code: Option<String>,
 
-    /// Password
-    #[clap(long, env = "FMCD_PASSWORD", required = true)]
-    password: String,
+    /// Path to FM database (overrides config)
+    #[clap(long, env = "FMCD_DB_PATH")]
+    db_path: Option<PathBuf>,
 
-    /// Addr
-    #[clap(long, env = "FMCD_ADDR", required = true)]
-    addr: String,
+    /// Password (overrides config)
+    #[clap(long, env = "FMCD_PASSWORD")]
+    password: Option<String>,
 
-    /// Prometheus addr
-    #[clap(long, env = "PROMETHEUS_ADDR", default_value = "127.0.0.1:3001")]
-    prometheus_addr: String,
+    /// Server address (overrides config)
+    #[clap(long, env = "FMCD_ADDR")]
+    addr: Option<String>,
 
-    /// Manual secret
-    #[clap(long, env = "FMCD_MANUAL_SECRET", required = false)]
+    /// Manual secret (overrides config)
+    #[clap(long, env = "FMCD_MANUAL_SECRET")]
     manual_secret: Option<String>,
 
     /// Mode: ws, rest
     #[clap(long, env = "FMCD_MODE", default_value = "rest")]
     mode: Mode,
+
+    /// Disable authentication
+    #[clap(long)]
+    no_auth: bool,
 }
 
 // const PID_FILE: &str = "/tmp/fedimint_http.pid";
@@ -97,18 +105,65 @@ async fn main() -> Result<()> {
 
     let cli: Cli = Cli::parse();
 
-    let mut state = AppState::new(cli.db_path).await?;
+    // Load or create configuration file with automatic password generation
+    let term = Term::stdout();
+    let (mut config, password_generated) = Config::load_or_create(&cli.config)?;
 
-    match InviteCode::from_str(&cli.invite_code) {
-        Ok(invite_code) => {
-            let federation_id = state.multimint.register_new(invite_code).await?;
-            info!("Created client for federation id: {:?}", federation_id);
+    if password_generated {
+        term.write_line(&format!(
+            "{}{}",
+            style("Generating default api password...").yellow(),
+            style("done").white()
+        ))?;
+    }
+
+    // Override config with CLI arguments
+    if let Some(invite_code) = cli.invite_code {
+        config.invite_code = Some(invite_code);
+    }
+    if let Some(db_path) = cli.db_path {
+        config.db_path = Some(db_path);
+    }
+    if let Some(password) = cli.password {
+        config.http_password = Some(password);
+    }
+    if let Some(addr) = cli.addr {
+        // Parse address to extract IP and port
+        if let Some((ip, port_str)) = addr.split_once(':') {
+            config.http_bind_ip = ip.to_string();
+            if let Ok(port) = port_str.parse::<u16>() {
+                config.http_bind_port = port;
+            }
         }
-        Err(e) => {
-            info!(
-                "No federation invite code provided, skipping client creation: {}",
-                e
-            );
+    }
+    if let Some(manual_secret) = cli.manual_secret {
+        config.manual_secret = Some(manual_secret);
+    }
+    if cli.no_auth {
+        config.http_password = None;
+    }
+
+    // Determine database path
+    let db_path = config
+        .db_path
+        .clone()
+        .ok_or_else(|| anyhow::anyhow!("Database path must be specified in config or CLI"))?;
+
+    let mut state = AppState::new(db_path).await?;
+
+    // Handle federation invite code
+    if let Some(invite_code_str) = &config.invite_code {
+        match InviteCode::from_str(invite_code_str) {
+            Ok(invite_code) => {
+                let federation_id = state.multimint.register_new(invite_code).await?;
+                info!("Created client for federation id: {:?}", federation_id);
+            }
+            Err(e) => {
+                info!(
+                    "No federation invite code provided, skipping client creation: {}",
+                    e
+                );
+            }
         }
     }
 
@@ -116,61 +171,65 @@ async fn main() -> Result<()> {
         return Err(anyhow::anyhow!("No clients found, must have at least one client to start the server. Try providing a federation invite code with the `--invite-code` flag or setting the `FMCD_INVITE_CODE` environment variable."));
     }
 
-    let main_server = start_main_server(&cli.addr, &cli.password, cli.mode, state)
-        .map_err(|e| e.context("main server has failed"));
-    let metrics_server = start_metrics_server(&cli.prometheus_addr)
-        .map_err(|e| e.context("metrics server has failed"));
-
-    try_join!(main_server, metrics_server)?;
+    start_main_server(&config, cli.mode, state).await?;
     Ok(())
 }
 
-async fn start_main_server(
-    addr: &str,
-    password: &str,
-    mode: Mode,
-    state: AppState,
-) -> anyhow::Result<()> {
+async fn start_main_server(config: &Config, mode: Mode, state: AppState) -> anyhow::Result<()> {
+    // Create authentication instances
+    let basic_auth = Arc::new(BasicAuth::new(config.http_password.clone()));
+    let ws_auth = Arc::new(WebSocketAuth::new(config.http_password.clone()));
+
+    // Create the router based on mode
     let app = match mode {
-        Mode::Rest => Router::new()
-            .nest("/v2", fedimint_v2_rest())
-            .with_state(state)
-            .layer(ValidateRequestHeaderLayer::bearer(password)),
+        Mode::Rest => {
+            let router = Router::new()
+                .nest("/v2", fedimint_v2_rest())
+                .with_state(state);
+
+            // Apply authentication middleware if enabled
+            if basic_auth.is_enabled() {
+                let auth_clone = basic_auth.clone();
+                router.route_layer(middleware::from_fn(move |request, next| {
+                    basic_auth_middleware(auth_clone.clone(), request, next)
+                }))
+            } else {
+                router
+            }
+        }
         Mode::Ws => Router::new()
             .route("/ws", get(websocket_handler))
-            .with_state(state)
-            .layer(ValidateRequestHeaderLayer::bearer(password)),
+            .with_state(state.clone())
+            .layer(axum::Extension(ws_auth)),
     };
-    info!("Starting server in {mode:?} mode");
+
+    let auth_status = if config.is_auth_enabled() {
+        "enabled"
+    } else {
+        "disabled"
+    };
+    info!("Starting server in {mode:?} mode with authentication {auth_status}");
 
     let cors = CorsLayer::new()
         .allow_methods([Method::GET, Method::POST])
         .allow_origin(Any)
         .allow_headers(Any);
 
+    // Add metrics endpoint to the main app
+    let metrics_handle = setup_metrics_recorder()?;
+
     let app = app
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .route("/health", get(|| async { "Server is up and running!" }))
+        .route("/metrics", get(move || ready(metrics_handle.render())))
         .route_layer(middleware::from_fn(track_metrics));
 
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    info!("fmcd listening on {addr:?}");
+    let addr = config.http_address();
+    let listener = tokio::net::TcpListener::bind(&addr).await?;
+    info!("fmcd listening on {addr}");
     axum::serve(listener, app).await?;
     Ok(())
-}
-
-async fn start_metrics_server(bind: &str) -> anyhow::Result<()> {
-    let app = metrics_app()?;
-    let listener = tokio::net::TcpListener::bind(bind).await?;
-    tracing::info!("Prometheus listening on {}", listener.local_addr()?);
-    axum::serve(listener, app).await?;
-    Ok(())
-}
-
-fn metrics_app() -> anyhow::Result<Router> {
-    let recorder_handle = setup_metrics_recorder()?;
-    Ok(Router::new().route("/metrics", get(move || ready(recorder_handle.render()))))
 }
 
 fn setup_metrics_recorder() -> anyhow::Result<PrometheusHandle> {
