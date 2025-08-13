@@ -2,9 +2,7 @@
   description = "A fedimint client daemon for server side applications to hold, use, and manage Bitcoin and ecash";
 
   inputs = {
-    nixpkgs = {
-      url = "github:nixos/nixpkgs/nixos-24.05";
-    };
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-24.05";
 
     flakebox = {
       url = "github:rustshop/flakebox?rev=ee39d59b2c3779e5827f8fa2d269610c556c04c8";
@@ -13,9 +11,7 @@
 
     flake-utils.url = "github:numtide/flake-utils";
 
-    fedimint = {
-      url = "github:fedimint/fedimint?ref=v0.4.2";
-    };
+    fedimint.url = "github:fedimint/fedimint?ref=v0.4.2";
   };
 
   outputs =
@@ -33,11 +29,14 @@
           inherit system;
           overlays = fedimint.overlays.fedimint;
         };
+
         lib = pkgs.lib;
         flakeboxLib = flakebox.lib.${system} { };
+
+        # Source files for the build
         rustSrc = flakeboxLib.filterSubPaths {
           root = builtins.path {
-            name = "fedimint-clientd";
+            name = "fmcd";
             path = ./.;
           };
           paths = [
@@ -45,105 +44,93 @@
             "Cargo.lock"
             ".cargo"
             "src"
-            "multimint"
-            "fedimint-clientd"
-            "fedimint-nwc"
-            "clientd-stateless"
           ];
         };
 
-        toolchainArgs =
-          let
-            llvmPackages = pkgs.llvmPackages_11;
-          in
-          {
-            extraRustFlags = "--cfg tokio_unstable";
-
-            components = [
-              "rustc"
-              "cargo"
-              "clippy"
-              "rust-analyzer"
-              "rust-src"
-            ];
-
-            args = {
-              nativeBuildInputs = [
-                pkgs.wasm-bindgen-cli
-                pkgs.geckodriver
-                pkgs.wasm-pack
-              ] ++ lib.optionals (!pkgs.stdenv.isDarwin) [ pkgs.firefox ];
-            };
-          };
-
-        # all standard toolchains provided by flakebox
-        toolchainsStd = flakeboxLib.mkStdFenixToolchains toolchainArgs;
-
-        toolchainsNative = (pkgs.lib.getAttrs [ "default" ] toolchainsStd);
-
-        toolchainNative = flakeboxLib.mkFenixMultiToolchain { toolchains = toolchainsNative; };
-
+        # Build configuration
         commonArgs = {
           buildInputs =
             [ ]
             ++ lib.optionals pkgs.stdenv.isDarwin [ pkgs.darwin.apple_sdk.frameworks.SystemConfiguration ];
           nativeBuildInputs = [ pkgs.pkg-config ];
         };
+
+        # Toolchain configuration
+        toolchainArgs = {
+          extraRustFlags = "--cfg tokio_unstable";
+          components = [
+            "rustc"
+            "cargo"
+            "clippy"
+            "rust-analyzer"
+            "rust-src"
+          ];
+        };
+
+        toolchainsStd = flakeboxLib.mkStdFenixToolchains toolchainArgs;
+
+        # Build outputs
         outputs = (flakeboxLib.craneMultiBuild { toolchains = toolchainsStd; }) (
           craneLib':
           let
             craneLib =
               (craneLib'.overrideArgs {
-                pname = "flexbox-multibuild";
+                pname = "fmcd";
                 src = rustSrc;
               }).overrideArgs
                 commonArgs;
           in
           rec {
-            workspaceDeps = craneLib.buildWorkspaceDepsOnly { };
-            workspaceBuild = craneLib.buildWorkspace { cargoArtifacts = workspaceDeps; };
-            fedimint-clientd = craneLib.buildPackageGroup {
-              pname = "fedimint-clientd";
-              packages = [ "fedimint-clientd" ];
-              mainProgram = "fedimint-clientd";
+            workspaceDeps = craneLib.buildDepsOnly { };
+
+            fmcd = craneLib.buildPackage {
+              pname = "fmcd";
+              cargoArtifacts = workspaceDeps;
             };
 
-            fedimint-clientd-oci = pkgs.dockerTools.buildLayeredImage {
-              name = "fedimint-clientd";
-              contents = [ fedimint-clientd ];
+            fmcd-oci = pkgs.dockerTools.buildLayeredImage {
+              name = "fmcd";
+              contents = [ fmcd ];
               config = {
-                Cmd = [ "${fedimint-clientd}/bin/fedimint-clientd" ];
+                Cmd = [ "${fmcd}/bin/fmcd" ];
               };
             };
           }
         );
       in
       {
-        legacyPackages = outputs;
         packages = {
-          default = outputs.fedimint-clientd;
+          default = outputs.fmcd;
+          oci = outputs.fmcd-oci;
         };
+
         devShells = flakeboxLib.mkShells {
           packages = [ ];
-          buildInputs = commonArgs.buildInputs;
-          nativeBuildInputs = [
-            pkgs.mprocs
-            pkgs.go
-            pkgs.bun
-            pkgs.bitcoind
-            pkgs.clightning
-            pkgs.lnd
-            pkgs.esplora-electrs
-            pkgs.electrs
-            commonArgs.nativeBuildInputs
-            fedimint.packages.${system}.devimint
-            fedimint.packages.${system}.gateway-pkgs
-            fedimint.packages.${system}.fedimint-pkgs
-          ];
+          buildInputs = commonArgs.buildInputs ++ [ pkgs.glibcLocales ];
+          nativeBuildInputs =
+            with pkgs;
+            [
+              mprocs
+              bitcoind
+              clightning
+              lnd
+              esplora-electrs
+              electrs
+              pkg-config
+              perl
+            ]
+            ++ [
+              fedimint.packages.${system}.devimint
+              fedimint.packages.${system}.gateway-pkgs
+              fedimint.packages.${system}.fedimint-pkgs
+            ];
           shellHook = ''
             export RUSTFLAGS="--cfg tokio_unstable"
             export RUSTDOCFLAGS="--cfg tokio_unstable"
             export RUST_LOG="info"
+            export LOCALE_ARCHIVE="${pkgs.glibcLocales}/lib/locale/locale-archive"
+            export LANG="en_US.UTF-8"
+            export LC_ALL="en_US.UTF-8"
           '';
         };
       }

@@ -1,18 +1,20 @@
-# fedimint-clientd: A Fedimint Client for Server Side Applications
+# FMCD: A Fedimint Client for Server Side Applications
 
-fedimint-clientd runs a fedimint client with Ecash, Lightning, and Onchain modules to let a server side application hold and use Bitcoin with Fedimint. It exposes a REST API & provides wrappers in typescript, python, golang, and elixir. It uses the `multimint` crate to manage clients connected to multiple Federations from a single `fedimint-clientd` instance.
+> This project is an incompatible fork of [Fedimint Clientd](https://github.com/fedimint/fedimint-clientd)
 
-This project is intended to be an easy-to-use starting point for those interested in adding Fedimint client support to their applications. Fedimint-clientd only exposes Fedimint's default modules, and any more complex Fedimint integration will require custom implementation using [Fedimint's rust crates](https://github.com/fedimint/fedimint).
+Run a Fedimint client with Ecash, Lightning, and Onchain modules to let a server side application hold and use Bitcoin with Fedimint. `fmcd` exposes a REST and Websocket APIs, with ability to manage clients connected to multiple Federations from a single instance.
+
+This project is intended to be an easy-to-use starting point for those interested in adding Fedimint client support to their applications. `fmcd` only exposes Fedimint's default modules, and any more complex Fedimint integration will require custom implementation using [Fedimint's rust crates](https://github.com/fedimint/fedimint).
 
 ## Getting Started
 
-You can install the cli app with `cargo install fedimint-clientd` or by cloning the repo and running `cargo build --release` in the root directory.
+You can install the cli app with `cargo install fmcd` or by cloning the repo and running `cargo build --release` in the root directory.
 
-`fedimint-clientd` runs from the command line and takes a few arguments, which are also available as environment variables. Fedimint uses rocksDB, an embedded key-value store, to store its state. The `--fm_db_path` argument is required and should be an absolute path to a directory where the database will be stored.
+`fmcd` runs from the command line and takes a few arguments, which are also available as environment variables. Fedimint uses rocksDB, an embedded key-value store, to store its state. The `--fm_db_path` argument is required and should be an absolute path to a directory where the database will be stored.
 
 ```
 CLI USAGE:
-fedimint-clientd \
+fmcd \
   --db-path=/absolute/path/to/dir/to/store/database \
   --password="some-secure-password-that-becomes-the-bearer-token" \
   --addr="127.0.0.1:8080"
@@ -20,16 +22,16 @@ fedimint-clientd \
   --invite-code="fed1-fedimint-invite-code"
 
 ENV USAGE:
-FEDIMINT_CLIENTD_DB_PATH=/absolute/path/to/dir/to/store/database
-FEDIMINT_CLIENTD_PASSWORD="some-secure-password-that-becomes-the-bearer-token"
-FEDIMINT_CLIENTD_ADDR="127.0.0.1:8080"
-FEDIMINT_CLIENTD_MODE="rest"
-FEDIMINT_CLIENTD_INVITE_CODE="fed1-fedimint-invite-code"
+FMCD_DB_PATH=/absolute/path/to/dir/to/store/database
+FMCD_PASSWORD="some-secure-password-that-becomes-the-bearer-token"
+FMCD_ADDR="127.0.0.1:8080"
+FMCD_MODE="rest"
+FMCD_INVITE_CODE="fed1-fedimint-invite-code"
 ```
 
 ## Fedimint Clientd Endpoints
 
-`fedimint-clientd` supports the following endpoints (and has naive websocket support at `/v2/ws`, see code for details until I improve the interface. PRs welcome!). All the endpoints are authed with a Bearer token from the password (from CLI or env). You can hit the endpoints as such with curl, or use the python/typescript/golang wrappers:
+`fmcd` supports the following endpoints (and has naive websocket support at `/v2/ws`, see code for details until I improve the interface. PRs welcome!). All the endpoints are authed with a Bearer token from the password (from CLI or env). You can hit the endpoints as such with curl, or use the python/typescript/golang wrappers:
 
 ```
 curl http://localhost:3333/v2/admin/info -H 'Authorization: Bearer some-secure-password-that-becomes-the-bearer-token'
@@ -80,7 +82,7 @@ Fedimint Clientd is not officially supported on Docker. However, you can build, 
 - Build an OCI image
 
 ```
-nix build .#fedimint-clientd-oci && docker load < ./result
+nix build .#fmcd-oci && docker load < ./result
 ```
 
 - confirm the image is built and loaded in your local docker registry
@@ -89,13 +91,13 @@ nix build .#fedimint-clientd-oci && docker load < ./result
 docker image ls
 
 # REPOSITORY          TAG                                IMAGE ID       CREATED        SIZE
-# fedimint-clientd    f4cb5pgsw4sn7mg93xwyvx09ib4qg3rd   ff8cf0f0805b   54 years ago   91.1MB1.1GB
+# fmcd    f4cb5pgsw4sn7mg93xwyvx09ib4qg3rd   ff8cf0f0805b   54 years ago   91.1MB1.1GB
 # ...
 ```
 
 - Tag the image image appropriately then publish to your preferred registry
 
 ```
-docker tag fedimint-clientd <registry>/fedimint-clientd:v0.4.0
-docker push <registry>/fedimint-clientd:v0.4.0
+docker tag fmcd <registry>/fmcd:v0.4.0
+docker push <registry>/fmcd:v0.4.0
 ```
