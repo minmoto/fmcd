@@ -53,20 +53,56 @@ jobs:
           # Configure Nix for cross-compilation if needed
           if [ "${{ matrix.system }}" = "aarch64-linux" ] && [ "$(uname -m)" = "x86_64" ]; then
             echo "Cross-compiling from x86_64 to aarch64"
-            # Ensure QEMU binfmt is registered
-            docker run --rm --privileged multiarch/qemu-user-static --reset -p yes || true
+
+            # Check if QEMU binfmt is already registered
+            if [ -f /proc/sys/fs/binfmt_misc/qemu-aarch64 ]; then
+              echo "✓ QEMU binfmt for aarch64 is already registered"
+            else
+              echo "Setting up QEMU binfmt for aarch64..."
+              if docker run --rm --privileged multiarch/qemu-user-static --reset -p yes; then
+                echo "✓ QEMU binfmt successfully registered"
+              else
+                echo "⚠ Warning: Failed to register QEMU binfmt, but it might already be set up by the runner"
+                # Verify QEMU is actually working
+                if ! docker run --rm arm64v8/alpine uname -m 2>/dev/null | grep -q aarch64; then
+                  echo "✗ Error: QEMU emulation is not working properly"
+                  exit 1
+                fi
+                echo "✓ QEMU emulation verified to be working"
+              fi
+            fi
           fi
 
           # Build for the target system with verbose output
-          nix build .#packages.${{ matrix.system }}.oci --print-build-logs
+          echo "Starting Nix build for ${{ matrix.system }}..."
+          if nix build .#packages.${{ matrix.system }}.oci --print-build-logs; then
+            echo "✓ Nix build succeeded for ${{ matrix.system }}"
+          else
+            echo "✗ Nix build failed for ${{ matrix.system }}"
+            exit 1
+          fi
 
           # Save the archive path
-          echo "OCI_ARCHIVE=$(readlink -f result)" >> $GITHUB_ENV
+          if [ -L result ]; then
+            OCI_PATH=$(readlink -f result)
+            echo "OCI_ARCHIVE=$OCI_PATH" >> $GITHUB_ENV
+            echo "✓ OCI archive created at: $OCI_PATH"
+          else
+            echo "✗ Error: result symlink not found"
+            exit 1
+          fi
 
           # Save archive as artifact for manifest creation
           mkdir -p artifacts
-          cp -L result artifacts/oci-${{ matrix.system }}.tar.gz
-          echo "Build completed for ${{ matrix.system }}"
+          if cp -L result artifacts/oci-${{ matrix.system }}.tar.gz; then
+            echo "✓ OCI archive copied to artifacts/oci-${{ matrix.system }}.tar.gz"
+            echo "  Archive size: $(du -h artifacts/oci-${{ matrix.system }}.tar.gz | cut -f1)"
+          else
+            echo "✗ Failed to copy OCI archive"
+            exit 1
+          fi
+
+          echo "✓ Build completed successfully for ${{ matrix.system }}"
 
       - name: Upload OCI archive
         uses: actions/upload-artifact@v4

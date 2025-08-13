@@ -6,8 +6,8 @@ on:
       - main
       - master
     # Version tags are handled by docker-multiarch.yml
-    tags-ignore:
-      - 'v*'
+    tags:
+      - '!v*'
   pull_request:
     branches:
       - main
