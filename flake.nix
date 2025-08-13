@@ -22,7 +22,7 @@
       flake-utils,
       fedimint,
     }:
-    flake-utils.lib.eachDefaultSystem (
+    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (
       system:
       let
         pkgs = import nixpkgs {
@@ -48,8 +48,7 @@
 
         # Build configuration
         commonArgs = {
-          buildInputs =
-            [ ] ++ lib.optionals pkgs.stdenv.isDarwin [ pkgs.darwin.apple_sdk.frameworks.SystemConfiguration ];
+          buildInputs = [ ];
           nativeBuildInputs = [ pkgs.pkg-config ];
         };
 
@@ -88,7 +87,7 @@
               cargoArtifacts = workspaceDeps;
             };
 
-            fmcd-oci = pkgs.dockerTools.buildLayeredImage {
+            oci = pkgs.dockerTools.buildLayeredImage {
               name = "fmcd";
               contents = [ fmcd ];
               config = {
@@ -101,7 +100,7 @@
       {
         packages = {
           default = outputs.fmcd;
-          oci = outputs.fmcd-oci;
+          oci = outputs.oci;
         };
 
         devShells = {

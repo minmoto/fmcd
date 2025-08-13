@@ -44,8 +44,58 @@ format:
   if [ ! -f Cargo.toml ]; then
     cd {{invocation_directory()}}
   fi
+
+  # Format Rust code with cargo fmt
+  echo "Formatting Rust files..."
   cargo fmt --all
-  nixfmt $(git ls-files | grep "\.nix$")
+
+  # Format Nix files with nixfmt
+  echo "Formatting Nix files..."
+  nix_files=$(git ls-files | grep "\.nix$" || true)
+  if [ -n "$nix_files" ]; then
+    nixfmt $nix_files || true
+  else
+    echo "  No Nix files found"
+  fi
+
+  # Format YAML files (remove trailing whitespace and ensure newline at EOF)
+  echo "Formatting YAML files..."
+  yaml_count=0
+  for file in $(git ls-files | grep "\.ya\?ml$" || true); do
+    if [ -f "$file" ]; then
+      # Remove trailing whitespace
+      sed -i 's/[[:space:]]*$//' "$file"
+      # Ensure file ends with newline
+      if [ -n "$(tail -c 1 "$file")" ]; then
+        echo >> "$file"
+      fi
+      yaml_count=$((yaml_count + 1))
+    fi
+  done
+  echo "  Formatted $yaml_count YAML files"
+
+  # Format Markdown files (remove trailing whitespace and ensure newline at EOF)
+  echo "Formatting Markdown files..."
+  md_count=0
+  for file in $(git ls-files | grep "\.md$" || true); do
+    if [ -f "$file" ]; then
+      # Remove trailing whitespace
+      sed -i 's/[[:space:]]*$//' "$file"
+      # Ensure file ends with newline
+      if [ -n "$(tail -c 1 "$file")" ]; then
+        echo >> "$file"
+      fi
+      md_count=$((md_count + 1))
+    fi
+  done
+  echo "  Formatted $md_count Markdown files"
+
+  # Format justfile itself (remove trailing whitespace)
+  echo "Formatting justfile..."
+  sed -i 's/[[:space:]]*$//' justfile || true
+  echo "  Formatted justfile"
+
+  echo "Formatting complete!"
 
 
 # run lints (git pre-commit hook)
