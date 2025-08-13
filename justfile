@@ -62,7 +62,7 @@ test: build
   if [ ! -f Cargo.toml ]; then
     cd {{invocation_directory()}}
   fi
-  cargo test
+  cargo test --release
 
 
 # run and restart on changes

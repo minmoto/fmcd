@@ -7,6 +7,10 @@ use fedimint_core::config::{FederationId, FederationIdPrefix};
 
 use crate::error::AppError;
 use crate::multimint::MultiMint;
+
+#[cfg(test)]
+#[path = "state_tests.rs"]
+mod tests;
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub multimint: MultiMint,

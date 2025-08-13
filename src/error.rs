@@ -4,6 +4,10 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
 
+#[cfg(test)]
+#[path = "error_tests.rs"]
+mod tests;
+
 pub struct AppError {
     pub error: anyhow::Error,
     pub status: StatusCode,
