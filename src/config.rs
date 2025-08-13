@@ -77,7 +77,7 @@ impl Config {
         Ok(config)
     }
 
-    /// Save configuration to TOML file
+    /// Save configuration to TOML file atomically
     pub fn save_to_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let path = path.as_ref();
 
@@ -87,8 +87,21 @@ impl Config {
         }
 
         let contents = toml::to_string_pretty(self)?;
-        std::fs::write(path, contents)?;
-        Ok(())
+
+        // Write to temporary file first
+        let temp_path = path.with_extension("tmp");
+        std::fs::write(&temp_path, contents)?;
+
+        // Atomically rename temp file to actual config file
+        // This ensures the config file is never in a partially written state
+        match std::fs::rename(&temp_path, path) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                // Clean up temp file if rename failed
+                let _ = std::fs::remove_file(&temp_path);
+                Err(e.into())
+            }
+        }
     }
 
     /// Get the complete HTTP server address
@@ -121,6 +134,7 @@ impl Config {
     }
 
     /// Load or create configuration file with automatic password generation
+    /// Uses atomic file operations to prevent password loss on crash
     pub fn load_or_create<P: AsRef<Path>>(path: P) -> Result<(Self, bool)> {
         let path = path.as_ref();
         let mut password_generated = false;
@@ -142,13 +156,28 @@ impl Config {
         if config.http_password.is_none() {
             let generated_password = Self::generate_password();
 
-            // Append to config file
-            let append_content = format!("\nhttp-password = \"{}\"\n", generated_password);
-            std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(path)?
-                .write_all(append_content.as_bytes())?;
+            // Read existing content
+            let existing_content = std::fs::read_to_string(path)?;
+
+            // Prepare new content with password appended
+            let new_content = format!(
+                "{}\nhttp-password = \"{}\"\n",
+                existing_content.trim_end(),
+                generated_password
+            );
+
+            // Write atomically using a temporary file
+            let temp_path = path.with_extension("tmp");
+            std::fs::write(&temp_path, new_content)?;
+
+            // Atomically rename temp file to actual config file
+            // This ensures we either have the old config or the new one with password
+            // but never a corrupted state
+            if let Err(e) = std::fs::rename(&temp_path, path) {
+                // Clean up temp file if rename failed
+                let _ = std::fs::remove_file(&temp_path);
+                return Err(e.into());
+            }
 
             // Update in-memory config
             config.http_password = Some(generated_password);

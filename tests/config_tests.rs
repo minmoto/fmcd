@@ -127,4 +127,34 @@ fn test_load_or_create_existing_file_without_password() {
     // Verify the file was updated with the password
     let file_contents = std::fs::read_to_string(&config_path).unwrap();
     assert!(file_contents.contains(&format!("http-password = \"{}\"", password)));
+
+    // Verify no temp files are left behind
+    let temp_path = config_path.with_extension("tmp");
+    assert!(!temp_path.exists(), "Temporary file should be cleaned up");
+}
+
+#[test]
+fn test_atomic_save_no_temp_files() {
+    let dir = tempdir().unwrap();
+    let config_path = dir.path().join("atomic_test.toml");
+
+    let mut config = Config::default();
+    config.http_password = Some("test123".to_string());
+
+    // Save config atomically
+    config.save_to_file(&config_path).unwrap();
+
+    // Verify config was saved
+    assert!(config_path.exists());
+
+    // Verify no temp files are left behind
+    let temp_path = config_path.with_extension("tmp");
+    assert!(
+        !temp_path.exists(),
+        "Temporary file should be cleaned up after atomic save"
+    );
+
+    // Verify content is correct
+    let loaded = Config::load_from_file(&config_path).unwrap();
+    assert_eq!(loaded.http_password, Some("test123".to_string()));
 }
