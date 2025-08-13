@@ -4,12 +4,6 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Tag to publish (e.g., v1.0.0)'
-        required: false
-        type: string
 
 env:
   REGISTRY: docker.io
@@ -44,19 +38,27 @@ jobs:
             connect-timeout = 300
             stalled-download-timeout = 300
 
-      - name: Setup QEMU for ARM64 builds
-        if: matrix.system == 'aarch64-linux'
+      - name: Setup QEMU for cross-platform builds
         uses: docker/setup-qemu-action@v3
         with:
-          platforms: arm64
+          platforms: all
 
       - name: Setup Nix cache
         uses: DeterminateSystems/magic-nix-cache-action@v8
 
       - name: Build OCI container for ${{ matrix.platform }}
         run: |
-          # Build for the target system
-          nix build .#packages.${{ matrix.system }}.oci
+          echo "Building for ${{ matrix.system }} on $(uname -m)"
+
+          # Configure Nix for cross-compilation if needed
+          if [ "${{ matrix.system }}" = "aarch64-linux" ] && [ "$(uname -m)" = "x86_64" ]; then
+            echo "Cross-compiling from x86_64 to aarch64"
+            # Ensure QEMU binfmt is registered
+            docker run --rm --privileged multiarch/qemu-user-static --reset -p yes || true
+          fi
+
+          # Build for the target system with verbose output
+          nix build .#packages.${{ matrix.system }}.oci --print-build-logs
 
           # Save the archive path
           echo "OCI_ARCHIVE=$(readlink -f result)" >> $GITHUB_ENV
@@ -64,6 +66,7 @@ jobs:
           # Save archive as artifact for manifest creation
           mkdir -p artifacts
           cp -L result artifacts/oci-${{ matrix.system }}.tar.gz
+          echo "Build completed for ${{ matrix.system }}"
 
       - name: Upload OCI archive
         uses: actions/upload-artifact@v4
@@ -101,17 +104,13 @@ jobs:
       - name: Determine version tag
         id: version
         run: |
-          # Use manual input tag if provided, otherwise extract from git ref
-          if [ -n "${{ inputs.tag }}" ]; then
-            TAG="${{ inputs.tag }}"
-            echo "Using manually provided tag: $TAG"
-          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          # Extract tag from git ref (this workflow only runs on tag pushes)
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
             echo "Using tag from push event: $TAG"
           else
-            echo "Error: No tag provided or detected"
-            echo "GitHub ref: ${{ github.ref }}"
-            echo "Manual input: ${{ inputs.tag }}"
+            echo "Error: No tag detected in ref: ${{ github.ref }}"
+            echo "This workflow should only run on version tags"
             exit 1
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT

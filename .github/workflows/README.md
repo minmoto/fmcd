@@ -10,7 +10,7 @@ This directory contains GitHub Actions workflows for building and publishing fmc
   - Push to main/master branches
   - Pull requests (build only, no push)
   - Manual workflow dispatch
-  - **Note**: Does NOT run on version tags (handled by multi-arch workflow)
+  - **Note**: Explicitly ignores version tags (v*)
 - **Features**:
   - Uses Nix to build OCI containers
   - Automatic tagging based on branches
@@ -20,13 +20,12 @@ This directory contains GitHub Actions workflows for building and publishing fmc
 ### 2. docker-multiarch.yml
 - **Purpose**: Build and publish production multi-architecture images (amd64 and arm64)
 - **Triggers**:
-  - Version tags (v*) - exclusive handler for version releases
-  - Manual workflow dispatch with custom tag
+  - **ONLY** version tags (v*) - no other triggers
 - **Features**:
-  - Cross-compilation using Nix
+  - Cross-compilation using Nix with QEMU
   - Multi-arch manifest creation
   - Support for both x86_64 and aarch64
-  - Handles all semantic versioning tags
+  - Creates semantic version tags (latest, 1.2.3, 1.2, 1)
 
 ## Setup Requirements
 

@@ -48,8 +48,23 @@
 
         # Build configuration
         commonArgs = {
-          buildInputs = [ ];
-          nativeBuildInputs = [ pkgs.pkg-config ];
+          buildInputs =
+            [ ]
+            # Add clang/llvm for cross-compilation support
+            ++ lib.optionals (pkgs.stdenv.hostPlatform != pkgs.stdenv.buildPlatform) [
+              pkgs.llvmPackages.clang
+            ];
+          nativeBuildInputs = [
+            pkgs.pkg-config
+            # Add build tools for cross-compilation
+            pkgs.cmake
+            pkgs.clang
+          ];
+          # Set environment variables for cross-compilation
+          LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+          # Ensure RocksDB can find the correct compiler
+          CC = "${pkgs.clang}/bin/clang";
+          CXX = "${pkgs.clang}/bin/clang++";
         };
 
         # Toolchain configuration
