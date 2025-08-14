@@ -17,12 +17,17 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use tracing::info;
 
+use crate::health::{health_check, liveness_check, readiness_check};
+use crate::metrics::{api_metrics, init_prometheus_metrics};
+
 mod auth;
 mod config;
 mod multimint;
 mod observability;
 
 mod error;
+mod health;
+mod metrics;
 mod router;
 mod state;
 mod utils;
@@ -160,7 +165,7 @@ async fn main() -> Result<()> {
     // Database path is always the data directory
     let db_path = cli.data_dir.clone();
 
-    let mut state = AppState::new(db_path).await?;
+    let mut state = AppState::new_with_config(db_path, config.webhooks.clone()).await?;
 
     // Handle federation invite code
     if let Some(invite_code_str) = &config.invite_code {
@@ -180,6 +185,13 @@ async fn main() -> Result<()> {
 
     if state.multimint.all().await.is_empty() {
         return Err(anyhow::anyhow!("No clients found, must have at least one client to start the server. Try providing a federation invite code with the `--invite-code` flag or setting the `FMCD_INVITE_CODE` environment variable."));
+    }
+
+    // Start monitoring services for full observability parity
+    if let Err(e) = state.start_monitoring_services().await {
+        tracing::warn!("Failed to start monitoring services: {}", e);
+    } else {
+        tracing::info!("Monitoring services started successfully");
     }
 
     start_main_server(&config, cli.mode, state).await?;
@@ -226,14 +238,16 @@ async fn start_main_server(config: &Config, mode: Mode, state: AppState) -> anyh
         .allow_origin(Any)
         .allow_headers(Any);
 
-    // Add metrics endpoint to the main app
-    let metrics_handle = setup_metrics_recorder()?;
+    // Initialize comprehensive metrics system
+    let metrics_handle = init_prometheus_metrics().await?;
 
     let app = app
         .layer(middleware::from_fn(request_id_middleware))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
-        .route("/health", get(|| async { "Server is up and running!" }))
+        .route("/health", get(health_check))
+        .route("/health/live", get(liveness_check))
+        .route("/health/ready", get(readiness_check))
         .route("/metrics", get(move || ready(metrics_handle.render())))
         .route_layer(middleware::from_fn(track_metrics));
 
@@ -268,17 +282,11 @@ async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
 
     let response = next.run(req).await;
 
-    let latency = start.elapsed().as_secs_f64();
-    let status = response.status().as_u16().to_string();
+    let duration = start.elapsed();
+    let status_code = response.status().as_u16();
 
-    let labels = [
-        ("method", method.to_string()),
-        ("path", path),
-        ("status", status),
-    ];
-
-    metrics::counter!("http_requests_total", &labels).increment(1);
-    metrics::histogram!("http_requests_duration_seconds", &labels).record(latency);
+    // Use our comprehensive API metrics recording
+    api_metrics::record_api_request(&method.to_string(), &path, status_code, duration);
 
     response
 }
