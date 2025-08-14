@@ -5,6 +5,8 @@ use anyhow::Result;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
+use crate::webhooks::WebhookConfig;
+
 /// Configuration structure following phoenixd model
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
@@ -40,6 +42,10 @@ pub struct Config {
     /// Manual secret for additional security
     #[serde(rename = "manual-secret")]
     pub manual_secret: Option<String>,
+
+    /// Webhook configuration
+    #[serde(rename = "webhooks", default)]
+    pub webhooks: WebhookConfig,
 }
 
 impl Default for Config {
@@ -53,6 +59,7 @@ impl Default for Config {
             data_dir: None,
             invite_code: None,
             manual_secret: None,
+            webhooks: WebhookConfig::default(),
         }
     }
 }

@@ -1,9 +1,10 @@
 use anyhow::anyhow;
-use axum::extract::State;
+use axum::extract::{Extension, State};
 use axum::http::StatusCode;
 use axum::Json;
 use bitcoin::address::NetworkUnchecked;
 use bitcoin::{Address, Amount, Txid};
+use chrono::Utc;
 use fedimint_client::ClientHandleArc;
 use fedimint_core::config::FederationId;
 use fedimint_core::BitcoinAmountOrAll;
@@ -11,9 +12,11 @@ use fedimint_wallet_client::{WalletClientModule, WithdrawState};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tracing::info;
+use tracing::{error, info};
 
 use crate::error::AppError;
+use crate::events::FmcdEvent;
+use crate::observability::correlation::RequestContext;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -32,8 +35,10 @@ pub struct WithdrawResponse {
 }
 
 async fn _withdraw(
+    state: &AppState,
     client: ClientHandleArc,
     req: WithdrawRequest,
+    context: RequestContext,
 ) -> Result<WithdrawResponse, AppError> {
     let wallet_module = client.get_first_module::<WalletClientModule>()?;
     let (amount, fees) = match req.amount_sat {
@@ -72,6 +77,33 @@ async fn _withdraw(
         .withdraw(&req.address.assume_checked(), amount, fees, ())
         .await?;
 
+    // Emit withdrawal initiated event
+    let withdrawal_initiated_event = FmcdEvent::WithdrawalInitiated {
+        operation_id: operation_id.to_string(),
+        federation_id: req.federation_id.to_string(),
+        address: req.address.to_string(),
+        amount_sat: amount.to_sat(),
+        fee_sat: absolute_fees.to_sat(),
+        correlation_id: Some(context.correlation_id.clone()),
+        timestamp: Utc::now(),
+    };
+    if let Err(e) = state.event_bus.publish(withdrawal_initiated_event).await {
+        error!(
+            operation_id = %operation_id,
+            correlation_id = %context.correlation_id,
+            error = ?e,
+            "Failed to publish withdrawal initiated event"
+        );
+    }
+
+    info!(
+        operation_id = %operation_id,
+        address = %req.address,
+        amount_sat = amount.to_sat(),
+        fee_sat = absolute_fees.to_sat(),
+        "Withdrawal initiated"
+    );
+
     let mut updates = wallet_module
         .subscribe_withdraw_updates(operation_id)
         .await?
@@ -82,32 +114,106 @@ async fn _withdraw(
 
         match update {
             WithdrawState::Succeeded(txid) => {
+                // Emit withdrawal completed event
+                let withdrawal_completed_event = FmcdEvent::WithdrawalCompleted {
+                    operation_id: operation_id.to_string(),
+                    federation_id: req.federation_id.to_string(),
+                    txid: txid.to_string(),
+                    correlation_id: Some(context.correlation_id.clone()),
+                    timestamp: Utc::now(),
+                };
+                if let Err(e) = state.event_bus.publish(withdrawal_completed_event).await {
+                    error!(
+                        operation_id = %operation_id,
+                        correlation_id = %context.correlation_id,
+                        txid = %txid,
+                        error = ?e,
+                        "Failed to publish withdrawal completed event"
+                    );
+                }
+
+                info!(
+                    operation_id = %operation_id,
+                    txid = %txid,
+                    "Withdrawal completed successfully"
+                );
+
                 return Ok(WithdrawResponse {
                     txid: txid,
                     fees_sat: absolute_fees.to_sat(),
                 });
             }
             WithdrawState::Failed(e) => {
+                let error_reason = format!("Withdraw failed: {:?}", e);
+
+                // Emit withdrawal failed event
+                let withdrawal_failed_event = FmcdEvent::WithdrawalFailed {
+                    operation_id: operation_id.to_string(),
+                    federation_id: req.federation_id.to_string(),
+                    reason: error_reason.clone(),
+                    correlation_id: Some(context.correlation_id.clone()),
+                    timestamp: Utc::now(),
+                };
+                if let Err(event_err) = state.event_bus.publish(withdrawal_failed_event).await {
+                    error!(
+                        operation_id = %operation_id,
+                        correlation_id = %context.correlation_id,
+                        error = ?event_err,
+                        "Failed to publish withdrawal failed event"
+                    );
+                }
+
+                error!(
+                    operation_id = %operation_id,
+                    error = ?e,
+                    "Withdrawal failed"
+                );
+
                 return Err(AppError::new(
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    anyhow!("Withdraw failed: {:?}", e),
+                    anyhow!("{}", error_reason),
                 ));
             }
             _ => continue,
         };
     }
 
+    // Emit withdrawal failed event for stream ending without outcome
+    let error_reason = "Update stream ended without outcome".to_string();
+    let withdrawal_failed_event = FmcdEvent::WithdrawalFailed {
+        operation_id: operation_id.to_string(),
+        federation_id: req.federation_id.to_string(),
+        reason: error_reason.clone(),
+        correlation_id: Some(context.correlation_id.clone()),
+        timestamp: Utc::now(),
+    };
+    if let Err(e) = state.event_bus.publish(withdrawal_failed_event).await {
+        error!(
+            operation_id = %operation_id,
+            correlation_id = %context.correlation_id,
+            error = ?e,
+            "Failed to publish withdrawal failed event for stream timeout"
+        );
+    }
+
+    error!(
+        operation_id = %operation_id,
+        "Update stream ended without outcome"
+    );
+
     Err(AppError::new(
         StatusCode::INTERNAL_SERVER_ERROR,
-        anyhow!("Update stream ended without outcome"),
+        anyhow!("{}", error_reason),
     ))
 }
 
 pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
-    let v = serde_json::from_value::<WithdrawRequest>(v)
+    let req = serde_json::from_value::<WithdrawRequest>(v)
         .map_err(|e| AppError::new(StatusCode::BAD_REQUEST, anyhow!("Invalid request: {}", e)))?;
-    let client = state.get_client(v.federation_id).await?;
-    let withdraw = _withdraw(client, v).await?;
+    let client = state.get_client(req.federation_id).await?;
+    // TODO: WebSocket requests should get RequestContext from middleware
+    let context = RequestContext::new(None);
+    let withdraw = _withdraw(&state, client, req, context).await?;
     let withdraw_json = json!(withdraw);
     Ok(withdraw_json)
 }
@@ -115,9 +221,10 @@ pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
 #[axum_macros::debug_handler]
 pub async fn handle_rest(
     State(state): State<AppState>,
+    Extension(context): Extension<RequestContext>,
     Json(req): Json<WithdrawRequest>,
 ) -> Result<Json<WithdrawResponse>, AppError> {
     let client = state.get_client(req.federation_id).await?;
-    let withdraw = _withdraw(client, req).await?;
+    let withdraw = _withdraw(&state, client, req, context).await?;
     Ok(Json(withdraw))
 }

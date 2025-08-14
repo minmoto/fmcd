@@ -229,6 +229,12 @@ impl MultiMint {
         self.clients.lock().await.keys().cloned().collect()
     }
 
+    /// Get the federation ids as get_federation_ids for consistency with
+    /// services
+    pub async fn get_federation_ids(&self) -> Vec<FederationId> {
+        self.ids().await
+    }
+
     /// Get a client by its federation id.
     pub async fn get(&self, federation_id: &FederationId) -> Option<ClientHandleArc> {
         self.clients.lock().await.get(federation_id).cloned()
