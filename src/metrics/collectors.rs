@@ -73,7 +73,7 @@ pub async fn init_prometheus_metrics() -> anyhow::Result<PrometheusHandle> {
         register_counter!(GATEWAY_SELECTIONS_TOTAL, "Total gateway selection attempts");
         register_counter!(GATEWAY_FAILURES_TOTAL, "Total gateway failures");
 
-        // Federation metrics - fix: use gauge instead of histogram for balance
+        // Federation metrics
         register_gauge!(
             FEDERATION_BALANCE_MSAT,
             "Current federation balance in millisatoshis"

@@ -76,7 +76,25 @@ impl PaymentTracker {
     }
 
     /// Derive payment ID from invoice payment hash (compatible with phoenixd
-    /// approach)
+    /// Derives a payment ID from the invoice string by hashing it with SHA-256
+    /// and taking the first 16 bytes of the hash, encoded as a hexadecimal
+    /// string.
+    ///
+    /// # Format
+    /// The resulting payment ID is a 32-character lowercase hexadecimal string,
+    /// representing the first 16 bytes (128 bits) of the SHA-256 hash of the
+    /// invoice.
+    ///
+    /// # Security Implications
+    /// - Using only the first 16 bytes of the SHA-256 hash reduces the
+    ///   collision resistance compared to the full hash, but 128 bits is
+    ///   generally sufficient for uniqueness in practice for non-adversarial
+    ///   settings.
+    /// - This function is intended to generate unique, non-secret identifiers
+    ///   for payment tracking, not for cryptographic authentication or as a
+    ///   secret.
+    /// - Do not use this function for purposes requiring strong collision
+    ///   resistance or cryptographic security.
     pub fn derive_payment_id(invoice: &str) -> String {
         let mut hasher = Sha256::new();
         hasher.update(invoice.as_bytes());

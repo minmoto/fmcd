@@ -5,6 +5,7 @@ use anyhow::Result;
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
+use crate::observability::correlation::RateLimitConfig;
 use crate::webhooks::WebhookConfig;
 
 /// Configuration structure following phoenixd model
@@ -46,6 +47,10 @@ pub struct Config {
     /// Webhook configuration
     #[serde(rename = "webhooks", default)]
     pub webhooks: WebhookConfig,
+
+    /// Rate limiting configuration for correlation IDs
+    #[serde(rename = "rate-limiting", default)]
+    pub rate_limiting: RateLimitConfig,
 }
 
 impl Default for Config {
@@ -60,6 +65,7 @@ impl Default for Config {
             invite_code: None,
             manual_secret: None,
             webhooks: WebhookConfig::default(),
+            rate_limiting: RateLimitConfig::default(),
         }
     }
 }
