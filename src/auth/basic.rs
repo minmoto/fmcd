@@ -20,11 +20,11 @@ pub struct BasicAuth {
 }
 
 impl BasicAuth {
-    /// Create new BasicAuth instance following phoenixd model
+    /// Create new BasicAuth instance
     /// Uses fixed username "fmcd" and optional password
     pub fn new(password: Option<String>) -> Self {
         Self {
-            username: "fmcd".to_string(), // Fixed username like phoenixd
+            username: "fmcd".to_string(),
             password: password.clone().unwrap_or_default(),
             enabled: password.is_some(),
         }
