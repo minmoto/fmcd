@@ -40,7 +40,8 @@ use axum::Router;
 use clap::{Parser, Subcommand, ValueEnum};
 use config::Config;
 use console::{style, Term};
-use observability::{init_logging, request_id_middleware, LoggingConfig};
+use observability::correlation::create_request_id_middleware;
+use observability::{init_logging, LoggingConfig};
 use state::AppState;
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
@@ -242,7 +243,9 @@ async fn start_main_server(config: &Config, mode: Mode, state: AppState) -> anyh
     let metrics_handle = init_prometheus_metrics().await?;
 
     let app = app
-        .layer(middleware::from_fn(request_id_middleware))
+        .layer(middleware::from_fn(create_request_id_middleware(
+            config.rate_limiting.clone(),
+        )))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .route("/health", get(health_check))

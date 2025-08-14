@@ -9,7 +9,8 @@ mod tests;
 pub mod test_integration;
 
 pub use correlation::{
-    request_id_middleware, RequestContext, CORRELATION_ID_HEADER, REQUEST_ID_HEADER,
+    request_id_middleware, RateLimitConfig, RequestContext, CORRELATION_ID_HEADER,
+    REQUEST_ID_HEADER,
 };
 pub use logging::{init_logging, LoggingConfig};
 pub use sanitization::{

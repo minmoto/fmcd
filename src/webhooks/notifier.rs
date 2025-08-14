@@ -187,9 +187,73 @@ impl WebhookEndpoint {
         }
     }
 
-    pub fn with_secret(mut self, secret: String) -> Self {
+    pub fn with_secret(mut self, secret: String) -> anyhow::Result<Self> {
+        // Validate secret for minimum length and entropy
+        Self::validate_hmac_secret(&secret)?;
         self.secret = Some(secret);
-        self
+        Ok(self)
+    }
+
+    /// Validate HMAC secret for cryptographic security
+    fn validate_hmac_secret(secret: &str) -> anyhow::Result<()> {
+        // Minimum length for HMAC-SHA256 security (32 bytes = 256 bits)
+        const MIN_SECRET_LENGTH: usize = 32;
+
+        if secret.len() < MIN_SECRET_LENGTH {
+            return Err(anyhow::anyhow!(
+                "HMAC secret must be at least {} characters long for cryptographic security",
+                MIN_SECRET_LENGTH
+            ));
+        }
+
+        // Check for sufficient entropy (variety of character types)
+        let has_uppercase = secret.chars().any(|c| c.is_ascii_uppercase());
+        let has_lowercase = secret.chars().any(|c| c.is_ascii_lowercase());
+        let has_digit = secret.chars().any(|c| c.is_ascii_digit());
+        let has_special = secret.chars().any(|c| !c.is_ascii_alphanumeric());
+
+        let entropy_score = [has_uppercase, has_lowercase, has_digit, has_special]
+            .iter()
+            .filter(|&&x| x)
+            .count();
+
+        if entropy_score < 3 {
+            return Err(anyhow::anyhow!(
+                "HMAC secret must contain at least 3 of: uppercase, lowercase, digits, special characters"
+            ));
+        }
+
+        // Check for common weak patterns
+        if secret.chars().all(|c| c.is_ascii_digit()) {
+            return Err(anyhow::anyhow!("HMAC secret cannot contain only digits"));
+        }
+
+        if secret.chars().all(|c| c.is_ascii_alphabetic()) {
+            return Err(anyhow::anyhow!(
+                "HMAC secret must contain non-alphabetic characters"
+            ));
+        }
+
+        // Check for sequential patterns (simple check)
+        let secret_bytes = secret.as_bytes();
+        let mut sequential_count = 0;
+        for i in 1..secret_bytes.len() {
+            if secret_bytes[i] == secret_bytes[i - 1] + 1
+                || secret_bytes[i] == secret_bytes[i - 1] - 1
+                || secret_bytes[i] == secret_bytes[i - 1]
+            {
+                sequential_count += 1;
+                if sequential_count > secret.len() / 3 {
+                    return Err(anyhow::anyhow!(
+                        "HMAC secret contains too many sequential or repeated characters"
+                    ));
+                }
+            } else {
+                sequential_count = 0;
+            }
+        }
+
+        Ok(())
     }
 
     pub fn with_events(mut self, events: Vec<String>) -> Self {
@@ -232,6 +296,7 @@ impl Default for WebhookConfig {
 }
 
 /// Webhook notifier that implements the EventHandler trait
+#[derive(Clone)]
 pub struct WebhookNotifier {
     client: Client,
     config: WebhookConfig,
@@ -556,8 +621,7 @@ impl EventHandler for WebhookNotifier {
         // Webhook notifications are non-critical - we don't want to block event
         // processing if webhook delivery fails, so we spawn this in the
         // background
-        let notifier = Arc::new(self);
-        let notifier_clone = notifier.clone();
+        let notifier_clone = self.clone();
 
         tokio::spawn(async move {
             if let Err(e) = notifier_clone.notify(&event).await {

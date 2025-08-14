@@ -6,16 +6,63 @@ use axum::extract::Request;
 use axum::http::{HeaderValue, StatusCode};
 use axum::middleware::Next;
 use axum::response::Response;
+use serde::{Deserialize, Serialize};
 use tracing::{info_span, warn, Instrument};
 use uuid::Uuid;
 
 pub const CORRELATION_ID_HEADER: &str = "X-Correlation-Id";
 pub const REQUEST_ID_HEADER: &str = "X-Request-Id";
 
-// Rate limiting configuration
-const MAX_CORRELATION_ID_LENGTH: usize = 200; // Limit correlation ID length
-const MAX_REQUESTS_PER_CORRELATION_ID: usize = 100; // Max requests per correlation ID per window
-const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60); // 1 minute window
+/// Configuration for correlation ID rate limiting
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RateLimitConfig {
+    /// Maximum length allowed for correlation IDs
+    pub max_correlation_id_length: usize,
+    /// Maximum requests per correlation ID per time window
+    pub max_requests_per_correlation_id: usize,
+    /// Time window for rate limiting in seconds
+    pub rate_limit_window_secs: u64,
+    /// Enable rate limiting (can be disabled for testing/debugging)
+    pub enabled: bool,
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            max_correlation_id_length: 200,
+            max_requests_per_correlation_id: 100,
+            rate_limit_window_secs: 60,
+            enabled: true,
+        }
+    }
+}
+
+impl RateLimitConfig {
+    /// Get the rate limit window as a Duration
+    pub fn rate_limit_window(&self) -> Duration {
+        Duration::from_secs(self.rate_limit_window_secs)
+    }
+
+    /// Create a permissive config for testing environments
+    pub fn permissive() -> Self {
+        Self {
+            max_correlation_id_length: 500,
+            max_requests_per_correlation_id: 10000,
+            rate_limit_window_secs: 1,
+            enabled: false,
+        }
+    }
+
+    /// Create a strict config for production environments
+    pub fn strict() -> Self {
+        Self {
+            max_correlation_id_length: 100,
+            max_requests_per_correlation_id: 50,
+            rate_limit_window_secs: 60,
+            enabled: true,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 struct RateLimitEntry {
@@ -43,12 +90,15 @@ impl RequestContext {
 }
 
 /// Validate correlation ID format and length
-fn validate_correlation_id(correlation_id: &str) -> Result<(), &'static str> {
+fn validate_correlation_id(
+    correlation_id: &str,
+    config: &RateLimitConfig,
+) -> Result<(), &'static str> {
     if correlation_id.is_empty() {
         return Err("Correlation ID cannot be empty");
     }
 
-    if correlation_id.len() > MAX_CORRELATION_ID_LENGTH {
+    if correlation_id.len() > config.max_correlation_id_length {
         return Err("Correlation ID exceeds maximum length");
     }
 
@@ -64,7 +114,12 @@ fn validate_correlation_id(correlation_id: &str) -> Result<(), &'static str> {
 }
 
 /// Check rate limit for correlation ID
-fn check_rate_limit(correlation_id: &str) -> Result<(), &'static str> {
+fn check_rate_limit(correlation_id: &str, config: &RateLimitConfig) -> Result<(), &'static str> {
+    // Skip rate limiting if disabled
+    if !config.enabled {
+        return Ok(());
+    }
+
     let rate_limiter =
         CORRELATION_RATE_LIMITER.get_or_init(|| Arc::new(Mutex::new(HashMap::new())));
 
@@ -76,18 +131,19 @@ fn check_rate_limit(correlation_id: &str) -> Result<(), &'static str> {
         }
     };
     let now = Instant::now();
+    let rate_limit_window = config.rate_limit_window();
 
     // Clean up expired entries
-    limiter.retain(|_, entry| now.duration_since(entry.window_start) < RATE_LIMIT_WINDOW);
+    limiter.retain(|_, entry| now.duration_since(entry.window_start) < rate_limit_window);
 
     match limiter.get_mut(correlation_id) {
         Some(entry) => {
-            if now.duration_since(entry.window_start) >= RATE_LIMIT_WINDOW {
+            if now.duration_since(entry.window_start) >= rate_limit_window {
                 // Reset window
                 entry.count = 1;
                 entry.window_start = now;
                 Ok(())
-            } else if entry.count >= MAX_REQUESTS_PER_CORRELATION_ID {
+            } else if entry.count >= config.max_requests_per_correlation_id {
                 Err("Rate limit exceeded for correlation ID")
             } else {
                 entry.count += 1;
@@ -107,7 +163,30 @@ fn check_rate_limit(correlation_id: &str) -> Result<(), &'static str> {
     }
 }
 
-pub async fn request_id_middleware(mut req: Request, next: Next) -> Result<Response, StatusCode> {
+pub fn create_request_id_middleware(
+    config: RateLimitConfig,
+) -> impl Fn(
+    Request,
+    Next,
+) -> std::pin::Pin<
+    Box<dyn std::future::Future<Output = Result<Response, StatusCode>> + Send>,
+> + Clone {
+    move |req, next| {
+        let config = config.clone();
+        Box::pin(request_id_middleware_impl(req, next, config))
+    }
+}
+
+/// Default middleware with default configuration
+pub async fn request_id_middleware(req: Request, next: Next) -> Result<Response, StatusCode> {
+    request_id_middleware_impl(req, next, RateLimitConfig::default()).await
+}
+
+async fn request_id_middleware_impl(
+    mut req: Request,
+    next: Next,
+    config: RateLimitConfig,
+) -> Result<Response, StatusCode> {
     // Extract correlation ID from headers with validation
     let correlation_id = req
         .headers()
@@ -118,7 +197,7 @@ pub async fn request_id_middleware(mut req: Request, next: Next) -> Result<Respo
     let validated_correlation_id = match correlation_id {
         Some(id) => {
             // Validate correlation ID format
-            if let Err(reason) = validate_correlation_id(&id) {
+            if let Err(reason) = validate_correlation_id(&id, &config) {
                 warn!(
                     correlation_id = %id,
                     reason = %reason,
@@ -128,7 +207,7 @@ pub async fn request_id_middleware(mut req: Request, next: Next) -> Result<Respo
             }
 
             // Check rate limit
-            if let Err(reason) = check_rate_limit(&id) {
+            if let Err(reason) = check_rate_limit(&id, &config) {
                 warn!(
                     correlation_id = %id,
                     reason = %reason,

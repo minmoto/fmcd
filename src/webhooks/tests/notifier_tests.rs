@@ -12,7 +12,8 @@ fn test_webhook_endpoint_creation() {
         "https://example.com/webhook".to_string(),
     )
     .expect("Failed to create webhook endpoint")
-    .with_secret("my-secret".to_string())
+    .with_secret("MySecureSecret123!@#WithEnoughEntropyForHMAC".to_string())
+    .expect("Failed to set secret")
     .with_events(vec![
         "payment_succeeded".to_string(),
         "invoice_created".to_string(),
@@ -21,7 +22,10 @@ fn test_webhook_endpoint_creation() {
 
     assert_eq!(endpoint.id, "test-endpoint");
     assert_eq!(endpoint.url, "https://example.com/webhook");
-    assert_eq!(endpoint.secret, Some("my-secret".to_string()));
+    assert_eq!(
+        endpoint.secret,
+        Some("MySecureSecret123!@#WithEnoughEntropyForHMAC".to_string())
+    );
     assert_eq!(endpoint.events.len(), 2);
     assert!(endpoint.should_receive_event("payment_succeeded"));
     assert!(endpoint.should_receive_event("invoice_created"));
@@ -222,9 +226,61 @@ fn test_debug_does_not_leak_secrets() {
         "https://example.com/webhook".to_string(),
     )
     .expect("Failed to create webhook endpoint")
-    .with_secret("super-secret-key".to_string());
+    .with_secret("SuperSecretKey123!@#WithEnoughEntropyForHMAC".to_string())
+    .expect("Failed to set secret");
 
     let debug_str = format!("{:?}", endpoint);
-    assert!(!debug_str.contains("super-secret-key"));
+    assert!(!debug_str.contains("SuperSecretKey123!@#WithEnoughEntropyForHMAC"));
     assert!(debug_str.contains("[REDACTED]"));
+}
+
+#[test]
+fn test_hmac_secret_validation() {
+    let base_endpoint = WebhookEndpoint::new(
+        "test".to_string(),
+        "https://example.com/webhook".to_string(),
+    )
+    .expect("Failed to create webhook endpoint");
+
+    // Test valid secret
+    assert!(base_endpoint
+        .clone()
+        .with_secret("ValidSecret123!@#WithEnoughEntropyAndLength".to_string())
+        .is_ok());
+
+    // Test secret too short
+    assert!(base_endpoint
+        .clone()
+        .with_secret("Short123!".to_string())
+        .is_err());
+
+    // Test secret with only digits
+    assert!(base_endpoint
+        .clone()
+        .with_secret("12345678901234567890123456789012345678".to_string())
+        .is_err());
+
+    // Test secret with only letters
+    assert!(base_endpoint
+        .clone()
+        .with_secret("abcdefghijklmnopqrstuvwxyzabcdefghijklmnop".to_string())
+        .is_err());
+
+    // Test secret with insufficient entropy (only 2 character types)
+    assert!(base_endpoint
+        .clone()
+        .with_secret("abcdefghijklmnopqrstuvwxyz1234567890".to_string())
+        .is_err());
+
+    // Test secret with too many sequential characters
+    assert!(base_endpoint
+        .clone()
+        .with_secret("abcdefghijklmnopqrstuvwxyzABCDEFGHI123!".to_string())
+        .is_err());
+
+    // Test secret with good entropy
+    assert!(base_endpoint
+        .clone()
+        .with_secret("MySecure123!Random@WordsWithGoodEntropy#".to_string())
+        .is_ok());
 }

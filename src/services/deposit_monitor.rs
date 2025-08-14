@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -17,6 +17,11 @@ use tracing::{debug, error, info, instrument, warn};
 
 use crate::events::{EventBus, FmcdEvent};
 use crate::multimint::MultiMint;
+
+/// Efficient subscription manager for deposit operations to avoid recreating
+/// subscriptions
+type DepositSubscription = tokio::sync::mpsc::UnboundedReceiver<DepositStateV2>;
+type SubscriptionMap = HashMap<OperationId, DepositSubscription>;
 
 /// Information about an active deposit operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +60,8 @@ pub struct DepositMonitor {
     multimint: Arc<MultiMint>,
     config: DepositMonitorConfig,
     active_deposits: Arc<RwLock<HashMap<OperationId, DepositInfo>>>,
+    /// Persistent subscriptions to avoid recreating them on each poll
+    subscriptions: Arc<RwLock<SubscriptionMap>>,
     shutdown_tx: Arc<Mutex<Option<broadcast::Sender<()>>>>,
 }
 
@@ -70,6 +77,7 @@ impl DepositMonitor {
             multimint,
             config,
             active_deposits: Arc::new(RwLock::new(HashMap::new())),
+            subscriptions: Arc::new(RwLock::new(HashMap::new())),
             shutdown_tx: Arc::new(Mutex::new(None)),
         }
     }
@@ -105,12 +113,7 @@ impl DepositMonitor {
             loop {
                 tokio::select! {
                     _ = poll_timer.tick() => {
-                        if let Err(e) = Self::poll_deposits(
-                            &event_bus,
-                            &multimint,
-                            &active_deposits,
-                            operation_timeout,
-                        ).await {
+                        if let Err(e) = monitor.poll_deposits().await {
                             error!(error = ?e, "Error during deposit polling");
                         }
                     }
@@ -213,16 +216,12 @@ impl DepositMonitor {
         }
     }
 
-    /// Internal method to poll all active deposits for updates
-    #[instrument(skip(event_bus, multimint, active_deposits))]
-    async fn poll_deposits(
-        event_bus: &Arc<EventBus>,
-        multimint: &Arc<MultiMint>,
-        active_deposits: &Arc<RwLock<HashMap<OperationId, DepositInfo>>>,
-        operation_timeout: Duration,
-    ) -> Result<()> {
+    /// Internal method to poll all active deposits for updates using efficient
+    /// subscription management
+    #[instrument(skip(self))]
+    async fn poll_deposits(&self) -> Result<()> {
         let deposits_to_check = {
-            let deposits = active_deposits.read().await;
+            let deposits = self.active_deposits.read().await;
             deposits.clone()
         };
 
@@ -233,165 +232,250 @@ impl DepositMonitor {
 
         debug!(
             active_deposits = deposits_to_check.len(),
-            "Polling active deposits for updates"
+            "Polling active deposits for updates with efficient subscription management"
         );
 
-        let now = Utc::now();
-        let mut completed_operations = Vec::new();
-        let mut timed_out_operations = Vec::new();
+        // Group deposits by federation for efficient batch processing
+        let mut deposits_by_federation: HashMap<FederationId, HashMap<OperationId, DepositInfo>> =
+            HashMap::new();
 
-        for (operation_id, deposit_info) in &deposits_to_check {
-            // Check for timeout
-            if now
-                .signed_duration_since(deposit_info.created_at)
-                .to_std()
-                .unwrap_or_default()
-                > operation_timeout
-            {
-                timed_out_operations.push(*operation_id);
+        for (operation_id, deposit_info) in deposits_to_check {
+            deposits_by_federation
+                .entry(deposit_info.federation_id)
+                .or_default()
+                .insert(operation_id, deposit_info);
+        }
+
+        let now = Utc::now();
+        let operation_timeout = self.config.operation_timeout;
+        let mut all_completed_operations = Vec::new();
+        let mut all_timed_out_operations = Vec::new();
+
+        // Process deposits efficiently by federation to reuse subscriptions
+        for (federation_id, federation_deposits) in deposits_by_federation {
+            // Check timeouts first
+            let mut valid_deposits = HashMap::new();
+            for (operation_id, deposit_info) in federation_deposits {
+                if now
+                    .signed_duration_since(deposit_info.created_at)
+                    .to_std()
+                    .unwrap_or_default()
+                    <= operation_timeout
+                {
+                    valid_deposits.insert(operation_id, deposit_info);
+                } else {
+                    all_timed_out_operations.push(operation_id);
+                }
+            }
+
+            if valid_deposits.is_empty() {
                 continue;
             }
 
             // Get client for this federation
-            let client = match multimint.get(&deposit_info.federation_id).await {
+            let client = match self.multimint.get(&federation_id).await {
                 Some(client) => client,
                 None => {
-                    warn!(
-                        operation_id = %operation_id,
-                        federation_id = %deposit_info.federation_id,
-                        "Federation client not available, skipping deposit check"
-                    );
+                    warn!(federation_id = %federation_id, "Federation client not available");
                     continue;
                 }
             };
 
-            // Check deposit status
-            match Self::check_deposit_status(&client, *operation_id, deposit_info).await {
-                Ok(Some(deposit_result)) => {
-                    // Emit deposit detected event
-                    let event = FmcdEvent::DepositDetected {
-                        operation_id: operation_id.to_string(),
-                        federation_id: deposit_info.federation_id.to_string(),
-                        address: deposit_info.address.to_string(),
-                        amount_sat: deposit_result.amount_sat,
-                        txid: deposit_result.txid,
-                        correlation_id: deposit_info.correlation_id.clone(),
-                        timestamp: Utc::now(),
-                    };
+            // Use efficient subscription-based checking
+            if let Ok(completed) = self
+                .check_deposit_statuses(&client, federation_id, &valid_deposits)
+                .await
+            {
+                for (operation_id, deposit_result) in completed {
+                    if let Some(deposit_info) = valid_deposits.get(&operation_id) {
+                        // Emit event
+                        let event = FmcdEvent::DepositDetected {
+                            operation_id: operation_id.to_string(),
+                            federation_id: deposit_info.federation_id.to_string(),
+                            address: deposit_info.address.to_string(),
+                            amount_sat: deposit_result.amount_sat,
+                            txid: deposit_result.txid,
+                            correlation_id: deposit_info.correlation_id.clone(),
+                            timestamp: Utc::now(),
+                        };
 
-                    if let Err(e) = event_bus.publish(event).await {
-                        error!(
-                            operation_id = %operation_id,
-                            error = ?e,
-                            "Failed to publish deposit detected event"
-                        );
-                    } else {
-                        info!(
-                            operation_id = %operation_id,
-                            federation_id = %deposit_info.federation_id,
-                            address = %deposit_info.address,
-                            amount_sat = deposit_result.amount_sat,
-                            txid = %deposit_result.txid,
-                            "Deposit detected and event published"
-                        );
+                        if let Err(e) = self.event_bus.publish(event).await {
+                            error!(operation_id = %operation_id, error = ?e, "Failed to publish event");
+                        } else {
+                            info!(operation_id = %operation_id, "Deposit detected");
+                        }
+                        all_completed_operations.push(operation_id);
                     }
-
-                    completed_operations.push(*operation_id);
-                }
-                Ok(None) => {
-                    // No update yet, continue monitoring
-                    debug!(
-                        operation_id = %operation_id,
-                        "Deposit still pending"
-                    );
-                }
-                Err(e) => {
-                    error!(
-                        operation_id = %operation_id,
-                        error = ?e,
-                        "Error checking deposit status"
-                    );
                 }
             }
         }
 
         // Remove completed and timed out operations
-        {
-            let mut deposits = active_deposits.write().await;
-            for operation_id in completed_operations {
-                deposits.remove(&operation_id);
+        if !all_completed_operations.is_empty() || !all_timed_out_operations.is_empty() {
+            let mut deposits = self.active_deposits.write().await;
+            let mut subscriptions = self.subscriptions.write().await;
+
+            for operation_id in &all_completed_operations {
+                deposits.remove(operation_id);
+                subscriptions.remove(operation_id);
             }
-            for operation_id in timed_out_operations {
-                deposits.remove(&operation_id);
+            for operation_id in &all_timed_out_operations {
+                deposits.remove(operation_id);
+                subscriptions.remove(operation_id);
                 warn!(
                     operation_id = %operation_id,
                     "Deposit operation timed out and was removed from monitoring"
                 );
             }
+
+            info!(
+                completed = all_completed_operations.len(),
+                timed_out = all_timed_out_operations.len(),
+                "Cleaned up deposit operations"
+            );
         }
 
         Ok(())
     }
 
-    /// Check the status of a specific deposit operation
-    async fn check_deposit_status(
+    /// Check the status of deposit operations using efficient subscription
+    /// management
+    async fn check_deposit_statuses(
+        &self,
         client: &ClientHandleArc,
-        operation_id: OperationId,
-        _deposit_info: &DepositInfo,
-    ) -> Result<Option<DepositResult>> {
-        let wallet_module = client
-            .get_first_module::<WalletClientModule>()
-            .map_err(|e| anyhow!("Failed to get wallet module: {}", e))?;
+        federation_id: FederationId,
+        operations: &HashMap<OperationId, DepositInfo>,
+    ) -> Result<Vec<(OperationId, DepositResult)>> {
+        let mut completed_deposits = Vec::new();
+        let mut subscriptions = self.subscriptions.write().await;
 
-        // Subscribe to deposit updates with a timeout
-        let mut updates = wallet_module
-            .subscribe_deposit(operation_id)
-            .await?
-            .into_stream();
+        // Check each operation
+        for (operation_id, _deposit_info) in operations {
+            // Try to get or create subscription for this operation
+            let has_subscription = subscriptions.contains_key(operation_id);
 
-        // Use select to timeout the stream check quickly
-        tokio::select! {
-            maybe_update = updates.next() => {
-                match maybe_update {
-                    Some(update) => {
+            if !has_subscription {
+                // Create new subscription only if we don't have one
+                if let Ok(subscription) = self
+                    .create_deposit_subscription(client, *operation_id)
+                    .await
+                {
+                    subscriptions.insert(*operation_id, subscription);
+                    debug!(
+                        operation_id = %operation_id,
+                        federation_id = %federation_id,
+                        "Created new deposit subscription"
+                    );
+                } else {
+                    warn!(
+                        operation_id = %operation_id,
+                        federation_id = %federation_id,
+                        "Failed to create deposit subscription"
+                    );
+                    continue;
+                }
+            }
+
+            // Check for updates on existing subscription
+            if let Some(subscription) = subscriptions.get_mut(operation_id) {
+                // Non-blocking check for updates
+                match subscription.try_recv() {
+                    Ok(update) => {
                         match update {
-                            DepositStateV2::Confirmed { btc_deposited, btc_out_point } |
-                            DepositStateV2::Claimed { btc_deposited, btc_out_point } => {
-                                Ok(Some(DepositResult {
-                                    amount_sat: btc_deposited.to_sat(),
-                                    txid: btc_out_point.txid.to_string(),
-                                    out_point: btc_out_point,
-                                }))
+                            DepositStateV2::Confirmed {
+                                btc_deposited,
+                                btc_out_point,
+                            }
+                            | DepositStateV2::Claimed {
+                                btc_deposited,
+                                btc_out_point,
+                            } => {
+                                completed_deposits.push((
+                                    *operation_id,
+                                    DepositResult {
+                                        amount_sat: btc_deposited.to_sat(),
+                                        txid: btc_out_point.txid.to_string(),
+                                        out_point: btc_out_point,
+                                    },
+                                ));
+
+                                debug!(
+                                    operation_id = %operation_id,
+                                    federation_id = %federation_id,
+                                    amount_sat = btc_deposited.to_sat(),
+                                    "Deposit completed successfully"
+                                );
                             }
                             DepositStateV2::Failed(reason) => {
                                 warn!(
                                     operation_id = %operation_id,
+                                    federation_id = %federation_id,
                                     reason = %reason,
-                                    "Deposit failed"
+                                    "Deposit failed, removing from monitoring"
                                 );
-                                Ok(None) // Remove from monitoring
+                                // Will be removed from active_deposits by
+                                // caller
                             }
                             _ => {
                                 // Still waiting (WaitingForTransaction, etc.)
-                                Ok(None)
+                                debug!(
+                                    operation_id = %operation_id,
+                                    federation_id = %federation_id,
+                                    state = ?update,
+                                    "Deposit still in progress"
+                                );
                             }
                         }
                     }
-                    None => {
-                        // Stream ended without result
+                    Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
+                        // No updates available, continue monitoring
+                    }
+                    Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
+                        // Subscription disconnected, remove it so it can be recreated
                         warn!(
                             operation_id = %operation_id,
-                            "Deposit stream ended without result"
+                            federation_id = %federation_id,
+                            "Deposit subscription disconnected, will recreate on next poll"
                         );
-                        Ok(None)
+                        subscriptions.remove(operation_id);
                     }
                 }
             }
-            _ = sleep(Duration::from_secs(1)) => {
-                // Quick timeout - we're just checking current status, not waiting
-                Ok(None)
-            }
         }
+
+        // Clean up subscriptions for operations that are no longer being monitored
+        let active_operation_ids: std::collections::HashSet<_> = operations.keys().collect();
+        subscriptions.retain(|op_id, _| active_operation_ids.contains(op_id));
+
+        Ok(completed_deposits)
+    }
+
+    /// Create a new subscription for a deposit operation
+    async fn create_deposit_subscription(
+        &self,
+        client: &ClientHandleArc,
+        operation_id: OperationId,
+    ) -> Result<DepositSubscription> {
+        let wallet_module = client
+            .get_first_module::<WalletClientModule>()
+            .map_err(|e| anyhow!("Failed to get wallet module: {}", e))?;
+
+        let subscription = wallet_module.subscribe_deposit(operation_id).await?;
+
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+
+        // Spawn a task to forward subscription updates to the channel
+        let mut stream = subscription.into_stream();
+        tokio::spawn(async move {
+            while let Some(update) = stream.next().await {
+                if tx.send(update).is_err() {
+                    // Receiver dropped, stop forwarding
+                    break;
+                }
+            }
+        });
+
+        Ok(rx)
     }
 }
 
