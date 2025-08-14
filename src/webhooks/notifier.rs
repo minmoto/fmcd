@@ -181,8 +181,7 @@ impl WebhookEndpoint {
             1433 | 1521 | 3306 | 5432 | 6379 | 27017 => true,
             // Internal service ports
             8080..=8090 | 9000..=9999 => true,
-            // Cloud metadata services
-            80 | 8080 if false => true, // We'll allow 80/443 for now but could add more checks
+            // Note: 80 and 443 are allowed for standard HTTP/HTTPS
             _ => false,
         }
     }

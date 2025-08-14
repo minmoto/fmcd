@@ -104,7 +104,7 @@ impl MetricsEventHandler {
     }
 
     /// Record authentication metrics using standardized metric names
-    fn record_auth_metrics(&self, endpoint: &str, success: bool, ip_address: &str) {
+    fn record_auth_metrics(&self, endpoint: &str, success: bool, _ip_address: &str) {
         let status = if success { "success" } else { "failure" };
 
         counter!(AUTH_ATTEMPTS_TOTAL, "endpoint" => endpoint.to_string(), "status" => status.to_string()).increment(1);
@@ -195,6 +195,47 @@ impl EventHandler for MetricsEventHandler {
                 ..
             } => {
                 self.record_auth_metrics(&endpoint, success, &ip_address);
+            }
+            // Withdrawal events
+            FmcdEvent::WithdrawalInitiated {
+                federation_id,
+                amount_sat,
+                ..
+            } => {
+                counter!(PAYMENTS_TOTAL, "federation_id" => federation_id, "type" => "withdrawal", "status" => "initiated").increment(1);
+                histogram!(PAYMENT_AMOUNT_MSAT, "federation_id" => federation_id)
+                    .record((amount_sat * 1000) as f64);
+            }
+            FmcdEvent::WithdrawalCompleted {
+                federation_id,
+                amount_sat,
+                ..
+            } => {
+                counter!(PAYMENTS_TOTAL, "federation_id" => federation_id, "type" => "withdrawal", "status" => "completed").increment(1);
+                histogram!(PAYMENT_AMOUNT_MSAT, "federation_id" => federation_id)
+                    .record((amount_sat * 1000) as f64);
+            }
+            FmcdEvent::WithdrawalFailed { federation_id, .. } => {
+                counter!(PAYMENTS_TOTAL, "federation_id" => federation_id, "type" => "withdrawal", "status" => "failed").increment(1);
+            }
+            // Deposit events
+            FmcdEvent::DepositDetected {
+                federation_id,
+                amount_sat,
+                ..
+            } => {
+                counter!(PAYMENTS_TOTAL, "federation_id" => federation_id, "type" => "deposit", "status" => "detected").increment(1);
+                histogram!(PAYMENT_AMOUNT_MSAT, "federation_id" => federation_id)
+                    .record((amount_sat * 1000) as f64);
+            }
+            // Balance change events
+            FmcdEvent::BalanceChanged {
+                federation_id,
+                new_balance_msat,
+                ..
+            } => {
+                gauge!(FEDERATION_BALANCE_MSAT, "federation_id" => federation_id)
+                    .set(new_balance_msat as f64);
             }
         }
 
