@@ -6,6 +6,7 @@ use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::Response;
 use base64::Engine;
+use tracing::{info, warn};
 
 #[derive(Clone)]
 pub struct BasicAuth {
@@ -54,8 +55,24 @@ pub async fn basic_auth_middleware(
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
+    let method = request.method().to_string();
+    let path = request.uri().path().to_string();
+    let remote_addr = request
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("unknown");
+
     // If authentication is disabled, pass through
     if !auth.enabled {
+        info!(
+            method = %method,
+            path = %path,
+            remote_addr = %remote_addr,
+            auth_enabled = false,
+            auth_result = "bypassed",
+            "Authentication bypassed - auth disabled"
+        );
         return Ok(next.run(request).await);
     }
 
@@ -65,16 +82,53 @@ pub async fn basic_auth_middleware(
         .and_then(|header| header.to_str().ok());
 
     match auth_header {
-        Some(header) if auth.verify(header) => Ok(next.run(request).await),
-        _ => {
+        Some(header) if auth.verify(header) => {
+            info!(
+                method = %method,
+                path = %path,
+                remote_addr = %remote_addr,
+                auth_enabled = true,
+                auth_result = "success",
+                auth_type = "basic",
+                username = %auth.username,
+                "Authentication successful"
+            );
+            Ok(next.run(request).await)
+        }
+        Some(_) => {
+            warn!(
+                method = %method,
+                path = %path,
+                remote_addr = %remote_addr,
+                auth_enabled = true,
+                auth_result = "failure",
+                auth_type = "basic",
+                failure_reason = "invalid_credentials",
+                "Authentication failed - invalid credentials"
+            );
             let response = Response::builder()
                 .status(StatusCode::UNAUTHORIZED)
                 .header("WWW-Authenticate", "Basic realm=\"fmcd\"")
                 .body(Body::from("Unauthorized"))
-                .unwrap_or_else(|_| {
-                    // Fallback to a minimal response if building fails
-                    Response::new(Body::from("Unauthorized"))
-                });
+                .unwrap_or_else(|_| Response::new(Body::from("Unauthorized")));
+            Ok(response)
+        }
+        None => {
+            warn!(
+                method = %method,
+                path = %path,
+                remote_addr = %remote_addr,
+                auth_enabled = true,
+                auth_result = "failure",
+                auth_type = "basic",
+                failure_reason = "missing_authorization_header",
+                "Authentication failed - missing Authorization header"
+            );
+            let response = Response::builder()
+                .status(StatusCode::UNAUTHORIZED)
+                .header("WWW-Authenticate", "Basic realm=\"fmcd\"")
+                .body(Body::from("Unauthorized"))
+                .unwrap_or_else(|_| Response::new(Body::from("Unauthorized")));
             Ok(response)
         }
     }

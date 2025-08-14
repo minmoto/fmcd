@@ -20,6 +20,7 @@ use tracing::info;
 mod auth;
 mod config;
 mod multimint;
+mod observability;
 
 mod error;
 mod router;
@@ -34,6 +35,7 @@ use axum::Router;
 use clap::{Parser, Subcommand, ValueEnum};
 use config::Config;
 use console::{style, Term};
+use observability::{init_logging, request_id_middleware, LoggingConfig};
 use state::AppState;
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
@@ -96,10 +98,21 @@ struct Cli {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt::init();
     dotenv::dotenv().ok();
 
     let cli: Cli = Cli::parse();
+
+    // Initialize structured logging
+    let log_config = LoggingConfig {
+        level: std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".to_string()),
+        log_dir: cli.data_dir.join("logs"),
+        console_output: !std::env::var("NO_CONSOLE_LOG").is_ok(),
+        file_output: !std::env::var("NO_FILE_LOG").is_ok(),
+        ..Default::default()
+    };
+    init_logging(log_config)?;
+
+    tracing::info!("Starting FMCD with structured logging and observability");
 
     // Ensure data directory exists
     std::fs::create_dir_all(&cli.data_dir)?;
@@ -217,6 +230,7 @@ async fn start_main_server(config: &Config, mode: Mode, state: AppState) -> anyh
     let metrics_handle = setup_metrics_recorder()?;
 
     let app = app
+        .layer(middleware::from_fn(request_id_middleware))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .route("/health", get(|| async { "Server is up and running!" }))

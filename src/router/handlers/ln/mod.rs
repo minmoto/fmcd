@@ -9,6 +9,7 @@ use futures_util::StreamExt;
 use tracing::{debug, info};
 
 use self::pay::{LnPayRequest, LnPayResponse};
+use crate::observability::sanitize_invoice;
 
 pub mod await_invoice;
 pub mod claim_external_receive_tweaked;
@@ -21,7 +22,10 @@ pub async fn get_invoice(req: &LnPayRequest) -> anyhow::Result<Bolt11Invoice> {
     let info = req.payment_info.trim();
     match Bolt11Invoice::from_str(info) {
         Ok(invoice) => {
-            debug!("Parsed parameter as bolt11 invoice: {invoice}");
+            debug!(
+                "Parsed parameter as bolt11 invoice: {}",
+                sanitize_invoice(&invoice)
+            );
             match (invoice.amount_milli_satoshis(), req.amount_msat) {
                 (Some(_), Some(_)) => {
                     bail!("Amount specified in both invoice and command line")
@@ -109,7 +113,7 @@ pub async fn wait_for_ln_payment(
                         bail!("FundingFailed: {error}")
                     }
                 }
-                info!("Update: {update:?}");
+                debug!("Payment state update received");
             }
         }
         PayType::Lightning(operation_id) => {
@@ -146,7 +150,7 @@ pub async fn wait_for_ln_payment(
                         bail!("UnexpectedError: {error_message}")
                     }
                 }
-                info!("Update: {update:?}");
+                debug!("Payment state update received");
             }
         }
     };

@@ -8,26 +8,29 @@ mod tests {
     #[test]
     fn test_app_error_new() {
         let error = AppError::new(StatusCode::NOT_FOUND, anyhow!("Not found"));
-        assert_eq!(error.status, StatusCode::NOT_FOUND);
+        assert_eq!(error.category.status_code(), StatusCode::NOT_FOUND);
     }
 
     #[test]
     fn test_app_error_from_anyhow() {
         let anyhow_error = anyhow!("Test error");
         let app_error = AppError::from(anyhow_error);
-        assert_eq!(app_error.status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(
+            app_error.category.status_code(),
+            StatusCode::INTERNAL_SERVER_ERROR
+        );
     }
 
     #[test]
     fn test_app_error_with_different_status_codes() {
         let error1 = AppError::new(StatusCode::BAD_REQUEST, anyhow!("Bad request"));
-        assert_eq!(error1.status, StatusCode::BAD_REQUEST);
+        assert_eq!(error1.category.status_code(), StatusCode::BAD_REQUEST);
 
         let error2 = AppError::new(StatusCode::UNAUTHORIZED, anyhow!("Unauthorized"));
-        assert_eq!(error2.status, StatusCode::UNAUTHORIZED);
+        assert_eq!(error2.category.status_code(), StatusCode::UNAUTHORIZED);
 
         let error3 = AppError::new(StatusCode::FORBIDDEN, anyhow!("Forbidden"));
-        assert_eq!(error3.status, StatusCode::FORBIDDEN);
+        assert_eq!(error3.category.status_code(), StatusCode::FORBIDDEN);
     }
 
     #[test]
