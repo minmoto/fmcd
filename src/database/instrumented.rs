@@ -275,7 +275,7 @@ impl<T: DatabaseInterface> DatabaseInterface for InstrumentedDatabase<T> {
 
 /// Helper trait for adding context to database operations
 pub trait DatabaseWithContext<T: DatabaseInterface> {
-    fn with_context(&self, context: &RequestContext) -> DatabaseContextWrapper<T>;
+    fn with_context<'a>(&'a self, context: &'a RequestContext) -> DatabaseContextWrapper<'a, T>;
 }
 
 /// Wrapper that carries request context for database operations
@@ -341,7 +341,7 @@ impl<'a, T: DatabaseInterface> DatabaseContextWrapper<'a, T> {
 }
 
 impl<T: DatabaseInterface> DatabaseWithContext<T> for InstrumentedDatabase<T> {
-    fn with_context(&self, context: &RequestContext) -> DatabaseContextWrapper<T> {
+    fn with_context<'a>(&'a self, context: &'a RequestContext) -> DatabaseContextWrapper<'a, T> {
         DatabaseContextWrapper::new(self, context)
     }
 }
