@@ -1,6 +1,7 @@
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
+use tracing::{info, warn};
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -44,12 +45,50 @@ impl WebSocketAuth {
     /// No replay protection - just signature verification like phoenixd
     pub fn verify_signature(&self, message: &str, timestamp: i64, signature: &str) -> bool {
         if !self.enabled {
+            info!(
+                auth_enabled = false,
+                auth_result = "bypassed",
+                auth_type = "hmac",
+                "WebSocket authentication bypassed - auth disabled"
+            );
             return true;
         }
 
         match self.create_signature(message, timestamp) {
-            Ok(expected) => expected == signature,
-            Err(_) => false,
+            Ok(expected) => {
+                if expected == signature {
+                    info!(
+                        auth_enabled = true,
+                        auth_result = "success",
+                        auth_type = "hmac",
+                        timestamp = timestamp,
+                        "WebSocket authentication successful"
+                    );
+                    true
+                } else {
+                    warn!(
+                        auth_enabled = true,
+                        auth_result = "failure",
+                        auth_type = "hmac",
+                        failure_reason = "invalid_signature",
+                        timestamp = timestamp,
+                        "WebSocket authentication failed - invalid signature"
+                    );
+                    false
+                }
+            }
+            Err(err) => {
+                warn!(
+                    auth_enabled = true,
+                    auth_result = "failure",
+                    auth_type = "hmac",
+                    failure_reason = "signature_creation_error",
+                    timestamp = timestamp,
+                    error = %err,
+                    "WebSocket authentication failed - signature creation error"
+                );
+                false
+            }
         }
     }
 }

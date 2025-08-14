@@ -41,7 +41,7 @@ async fn _await_invoice(
         req.operation_id
     );
     while let Some(update) = updates.next().await {
-        debug!("Update: {update:?}");
+        debug!("Invoice state update received");
         match &update {
             LnReceiveState::Claimed => {
                 return Ok(AwaitInvoiceResponse { status: update });

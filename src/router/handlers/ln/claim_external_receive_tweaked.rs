@@ -50,7 +50,7 @@ async fn _await_claim_external_receive_tweaked(
             operation_id
         );
         while let Some(update) = updates.next().await {
-            debug!("Update: {update:?}");
+            debug!("External receive state update received");
             match &update {
                 LnReceiveState::Claimed => {
                     return Ok(ClaimExternalReceiveTweakedResponse { status: update });
