@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::observability::correlation::RateLimitConfig;
 use crate::webhooks::WebhookConfig;
 
-/// Configuration structure following phoenixd model
+/// Configuration structure
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Config {
     /// HTTP server bind IP address
@@ -133,8 +133,7 @@ impl Config {
         self.http_password.as_deref()
     }
 
-    /// Generate a secure random 32-byte hex password (matching phoenixd's
-    /// behavior)
+    /// Generate a secure random 32-byte hex password
     pub fn generate_password() -> String {
         let mut bytes = [0u8; 32];
         rand::thread_rng().fill_bytes(&mut bytes);

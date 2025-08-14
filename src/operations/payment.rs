@@ -30,7 +30,7 @@ impl PaymentState {
 }
 
 /// Tracks payment operations through their entire lifecycle
-/// Derives payment IDs from invoice payment hashes similar to phoenixd
+/// Derives payment IDs from invoice payment hashes
 pub struct PaymentTracker {
     payment_id: String,
     federation_id: String,
@@ -75,7 +75,7 @@ impl PaymentTracker {
         }
     }
 
-    /// Derive payment ID from invoice payment hash (compatible with phoenixd
+    /// Derive payment ID from invoice payment hash
     /// Derives a payment ID from the invoice string by hashing it with SHA-256
     /// and taking the first 16 bytes of the hash, encoded as a hexadecimal
     /// string.

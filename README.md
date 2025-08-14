@@ -31,7 +31,7 @@ FMCD_INVITE_CODE="fed1-fedimint-invite-code"
 
 ## Authentication
 
-`fmcd` uses HTTP Basic Authentication (similar to phoenixd) with:
+`fmcd` uses HTTP Basic Authentication with:
 - Username: `fmcd` (fixed)
 - Password: Auto-generated on first run or set via `FMCD_PASSWORD`
 

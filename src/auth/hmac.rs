@@ -12,7 +12,7 @@ pub struct WebSocketAuth {
 }
 
 impl WebSocketAuth {
-    /// Create new WebSocketAuth instance following phoenixd model
+    /// Create new WebSocketAuth instance
     /// Uses the same password as HTTP Basic Auth for simplicity
     pub fn new(password: Option<String>) -> Self {
         Self {
@@ -26,7 +26,6 @@ impl WebSocketAuth {
     }
 
     /// Create HMAC-SHA256 signature for a message with timestamp
-    /// Following phoenixd's simple approach without replay protection
     pub fn create_signature(&self, message: &str, timestamp: i64) -> Result<String, String> {
         if !self.enabled {
             return Ok(String::new());
@@ -42,7 +41,7 @@ impl WebSocketAuth {
     }
 
     /// Verify HMAC signature for a message with timestamp
-    /// No replay protection - just signature verification like phoenixd
+    /// No replay protection - just signature verification
     pub fn verify_signature(&self, message: &str, timestamp: i64, signature: &str) -> bool {
         if !self.enabled {
             info!(
