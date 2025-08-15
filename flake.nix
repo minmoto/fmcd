@@ -2,10 +2,10 @@
   description = "A fedimint client daemon for server side applications to hold, use, and manage Bitcoin and ecash";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.05";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-24.11";
 
     flakebox = {
-      url = "github:rustshop/flakebox?rev=f90159e9c8e28a8a12e8d8673e37e80ef1a10c08";
+      url = "github:rustshop/flakebox";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -49,22 +49,24 @@
         # Build configuration
         commonArgs = {
           buildInputs =
-            [ ]
+            [
+              # System libraries needed for dependencies
+              pkgs.zstd
+              pkgs.openssl
+              pkgs.protobuf
+            ]
             # Add clang/llvm for cross-compilation support
             ++ lib.optionals (pkgs.stdenv.hostPlatform != pkgs.stdenv.buildPlatform) [
               pkgs.llvmPackages.clang
             ];
           nativeBuildInputs = [
             pkgs.pkg-config
-            # Add build tools for cross-compilation
             pkgs.cmake
             pkgs.clang
+            pkgs.llvmPackages.libclang.lib
           ];
-          # Set environment variables for cross-compilation
+          # Environment variables for build
           LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
-          # Ensure RocksDB can find the correct compiler
-          CC = "${pkgs.clang}/bin/clang";
-          CXX = "${pkgs.clang}/bin/clang++";
         };
 
         # Toolchain configuration
@@ -77,11 +79,38 @@
             "rust-analyzer"
             "rust-src"
           ];
-          # Use latest stable Rust to support edition2024
+          # Use stable Rust channel
           channel = "stable";
         };
 
         toolchainsStd = flakeboxLib.mkStdFenixToolchains toolchainArgs;
+
+        # Common dev shell configuration
+        commonShellArgs = {
+          buildInputs = commonArgs.buildInputs ++ [
+            pkgs.glibcLocales
+            pkgs.glibc.dev
+          ];
+          nativeBuildInputs = commonArgs.nativeBuildInputs ++ [
+            # Build tools
+            pkgs.perl
+
+            # Development tools
+            pkgs.mprocs
+          ];
+          # Inherit environment variables from commonArgs
+          inherit (commonArgs) LIBCLANG_PATH;
+
+          shellHook = ''
+            export RUSTFLAGS="--cfg tokio_unstable"
+            export RUSTDOCFLAGS="--cfg tokio_unstable"
+            export RUST_LOG="info"
+            export LOCALE_ARCHIVE="${pkgs.glibcLocales}/lib/locale/locale-archive"
+            export LANG="en_US.UTF-8"
+            export LC_ALL="en_US.UTF-8"
+            export LIBCLANG_PATH="${pkgs.llvmPackages.libclang.lib}/lib"
+          '';
+        };
 
         # Build outputs
         outputs = (flakeboxLib.craneMultiBuild { toolchains = toolchainsStd; }) (
@@ -119,27 +148,10 @@
         };
 
         devShells = {
-          default = flakeboxLib.mkDevShell {
-            buildInputs = commonArgs.buildInputs ++ [ pkgs.glibcLocales ];
-            nativeBuildInputs = commonArgs.nativeBuildInputs ++ [
-              # Build tools
-              pkgs.perl
-              pkgs.clang
-              pkgs.llvmPackages.libclang
+          default = flakeboxLib.mkDevShell commonShellArgs;
 
-              # Development tools
-              pkgs.mprocs
-            ];
-            shellHook = ''
-              export RUSTFLAGS="--cfg tokio_unstable"
-              export RUSTDOCFLAGS="--cfg tokio_unstable"
-              export RUST_LOG="info"
-              export LOCALE_ARCHIVE="${pkgs.glibcLocales}/lib/locale/locale-archive"
-              export LANG="en_US.UTF-8"
-              export LC_ALL="en_US.UTF-8"
-              export LIBCLANG_PATH="${pkgs.llvmPackages.libclang.lib}/lib"
-            '';
-          };
+          # Lint shell for CI (same as default)
+          lint = flakeboxLib.mkDevShell commonShellArgs;
         };
       }
     );
