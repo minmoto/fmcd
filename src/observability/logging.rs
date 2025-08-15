@@ -54,12 +54,8 @@ pub fn init_logging(config: LoggingConfig) -> anyhow::Result<()> {
     // Apply layers based on what's enabled
     match (config.console_output, config.file_output) {
         (true, true) => {
-            let file_appender = SecureFileAppender::new(
-                config.rotation,
-                config.log_dir.clone(),
-                "fmcd.log",
-                config.file_permissions,
-            );
+            let file_appender =
+                RollingFileAppender::new(config.rotation, &config.log_dir, "fmcd.log");
 
             let file_layer = fmt::layer()
                 .json()
@@ -83,12 +79,8 @@ pub fn init_logging(config: LoggingConfig) -> anyhow::Result<()> {
             subscriber.with(console_layer).init();
         }
         (false, true) => {
-            let file_appender = SecureFileAppender::new(
-                config.rotation,
-                config.log_dir.clone(),
-                "fmcd.log",
-                config.file_permissions,
-            );
+            let file_appender =
+                RollingFileAppender::new(config.rotation, &config.log_dir, "fmcd.log");
 
             let file_layer = fmt::layer()
                 .json()

@@ -28,7 +28,9 @@ pub struct DepositAddressRequest {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DepositAddressResponse {
-    pub address: Address,
+    // Use String for address to ensure proper serialization
+    // Fedimint returns Address<NetworkUnchecked> but we convert to String for API responses
+    pub address: String,
     pub operation_id: OperationId,
     pub tweak_idx: TweakIdx,
 }
@@ -55,15 +57,15 @@ async fn _deposit_address(
         .await?;
 
     // Record details in span
-    span.record("operation_id", &operation_id.to_string());
+    span.record("operation_id", &format!("{:?}", operation_id));
     span.record("address", &address.to_string());
 
     // Emit deposit address generated event
     let event_bus = state.event_bus.clone();
     let federation_id = req.federation_id.to_string();
     let address_str = address.to_string();
-    let operation_id_str = operation_id.to_string();
-    let correlation_id = context.as_ref().and_then(|c| c.correlation_id.clone());
+    let operation_id_str = format!("{:?}", operation_id);
+    let correlation_id = context.as_ref().map(|c| c.correlation_id.clone());
 
     tokio::spawn(async move {
         let event = FmcdEvent::DepositAddressGenerated {
@@ -81,7 +83,7 @@ async fn _deposit_address(
         let deposit_info = DepositInfo {
             operation_id,
             federation_id: req.federation_id,
-            address: address.clone(),
+            address: address.to_string(),
             correlation_id: context.as_ref().map(|c| c.correlation_id.clone()),
             created_at: Utc::now(),
         };
@@ -89,14 +91,14 @@ async fn _deposit_address(
         if let Err(e) = deposit_monitor.add_deposit(deposit_info).await {
             // Log error but don't fail the request - monitoring is best effort
             tracing::warn!(
-                operation_id = %operation_id,
+                operation_id = ?operation_id,
                 federation_id = %req.federation_id,
                 error = ?e,
                 "Failed to register deposit with monitor"
             );
         } else {
             tracing::debug!(
-                operation_id = %operation_id,
+                operation_id = ?operation_id,
                 federation_id = %req.federation_id,
                 "Deposit registered with monitor"
             );
@@ -105,13 +107,13 @@ async fn _deposit_address(
 
     info!(
         federation_id = %req.federation_id,
-        operation_id = %operation_id,
+        operation_id = ?operation_id,
         address = %address,
         "Deposit address generated successfully"
     );
 
     Ok(DepositAddressResponse {
-        address,
+        address: address.to_string(),
         operation_id,
         tweak_idx,
     })

@@ -260,6 +260,18 @@ pub struct EventBus {
     max_capacity: usize,
 }
 
+impl std::fmt::Debug for EventBus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EventBus")
+            .field("max_capacity", &self.max_capacity)
+            .field(
+                "handlers_count",
+                &self.handlers.try_read().map(|h| h.len()).unwrap_or(0),
+            )
+            .finish()
+    }
+}
+
 impl EventBus {
     /// Create a new event bus with the specified capacity
     pub fn new(capacity: usize) -> Self {

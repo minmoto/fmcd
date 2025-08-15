@@ -1,6 +1,7 @@
 use std::future::ready;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Instant;
 
 use anyhow::Result;
@@ -8,41 +9,25 @@ use axum::extract::{MatchedPath, Request};
 use axum::http::Method;
 use axum::middleware::{self, Next};
 use axum::response::IntoResponse;
-use fedimint_core::invite_code::InviteCode;
-use futures::future::TryFutureExt;
-use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
-use router::handlers::{admin, ln, mint, onchain};
-use router::ws::websocket_handler;
-use tower_http::cors::{Any, CorsLayer};
-use tower_http::trace::TraceLayer;
-use tracing::info;
-
-use crate::health::{health_check, liveness_check, readiness_check};
-use crate::metrics::{api_metrics, init_prometheus_metrics};
-
-mod auth;
-mod config;
-mod multimint;
-mod observability;
-
-mod error;
-mod health;
-mod metrics;
-mod router;
-mod state;
-mod utils;
-
-use std::sync::Arc;
-
-use auth::{basic_auth_middleware, BasicAuth, WebSocketAuth};
 use axum::routing::{get, post};
 use axum::Router;
 use clap::{Parser, Subcommand, ValueEnum};
-use config::Config;
 use console::{style, Term};
-use observability::correlation::create_request_id_middleware;
-use observability::{init_logging, LoggingConfig};
-use state::AppState;
+use fedimint_core::invite_code::InviteCode;
+use fmcd::auth::{basic_auth_middleware, BasicAuth, WebSocketAuth};
+use fmcd::config::Config;
+use fmcd::health::{health_check, liveness_check, readiness_check};
+use fmcd::metrics::{api_metrics, init_prometheus_metrics};
+use fmcd::observability::correlation::create_request_id_middleware;
+use fmcd::observability::{init_logging, LoggingConfig};
+use fmcd::router::handlers::{admin, ln, mint, onchain};
+use fmcd::router::ws::websocket_handler;
+use fmcd::state::AppState;
+use futures::future::TryFutureExt;
+use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
+use tower_http::cors::{Any, CorsLayer};
+use tower_http::trace::TraceLayer;
+use tracing::info;
 
 #[derive(Clone, Debug, ValueEnum, PartialEq)]
 enum Mode {

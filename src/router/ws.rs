@@ -160,8 +160,8 @@ fn create_json_rpc_response(res: Result<Value, AppError>, req_id: u64) -> JsonRp
             jsonrpc: JSONRPC_VERSION.to_string(),
             result: None,
             error: Some(JsonRpcError {
-                code: e.status.as_u16() as i16,
-                message: e.error.to_string(),
+                code: e.category.status_code().as_u16() as i16,
+                message: e.message.to_string(),
             }),
             id: Some(req_id),
         },

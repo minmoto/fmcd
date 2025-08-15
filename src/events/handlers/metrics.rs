@@ -114,6 +114,9 @@ impl MetricsEventHandler {
 #[async_trait]
 impl EventHandler for MetricsEventHandler {
     async fn handle(&self, event: FmcdEvent) -> anyhow::Result<()> {
+        // Capture event type before matching (to avoid move issues)
+        let event_type = event.event_type().to_string();
+
         match event {
             FmcdEvent::PaymentInitiated {
                 federation_id,
@@ -202,52 +205,35 @@ impl EventHandler for MetricsEventHandler {
                 amount_sat,
                 ..
             } => {
-                counter!(PAYMENTS_TOTAL, "federation_id" => federation_id, "type" => "withdrawal", "status" => "initiated").increment(1);
+                counter!(PAYMENTS_TOTAL, "federation_id" => federation_id.clone(), "type" => "withdrawal", "status" => "initiated").increment(1);
                 histogram!(PAYMENT_AMOUNT_MSAT, "federation_id" => federation_id)
                     .record((amount_sat * 1000) as f64);
             }
-            FmcdEvent::WithdrawalCompleted {
-                federation_id,
-                amount_sat,
-                ..
-            } => {
+            FmcdEvent::WithdrawalCompleted { federation_id, .. } => {
                 counter!(PAYMENTS_TOTAL, "federation_id" => federation_id, "type" => "withdrawal", "status" => "completed").increment(1);
-                histogram!(PAYMENT_AMOUNT_MSAT, "federation_id" => federation_id)
-                    .record((amount_sat * 1000) as f64);
             }
             FmcdEvent::WithdrawalFailed { federation_id, .. } => {
                 counter!(PAYMENTS_TOTAL, "federation_id" => federation_id, "type" => "withdrawal", "status" => "failed").increment(1);
             }
             // Deposit events
+            FmcdEvent::DepositAddressGenerated { federation_id, .. } => {
+                counter!(PAYMENTS_TOTAL, "federation_id" => federation_id, "type" => "deposit", "status" => "address_generated").increment(1);
+            }
             FmcdEvent::DepositDetected {
                 federation_id,
                 amount_sat,
                 ..
             } => {
-                counter!(PAYMENTS_TOTAL, "federation_id" => federation_id, "type" => "deposit", "status" => "detected").increment(1);
+                counter!(PAYMENTS_TOTAL, "federation_id" => federation_id.clone(), "type" => "deposit", "status" => "detected").increment(1);
                 histogram!(PAYMENT_AMOUNT_MSAT, "federation_id" => federation_id)
                     .record((amount_sat * 1000) as f64);
-            }
-            // Balance change events
-            FmcdEvent::BalanceChanged {
-                federation_id,
-                new_balance_msat,
-                ..
-            } => {
-                gauge!(FEDERATION_BALANCE_MSAT, "federation_id" => federation_id)
-                    .set(new_balance_msat as f64);
             }
         }
 
         // Record general event bus metrics
-        counter!(EVENT_BUS_EVENTS_TOTAL, "event_type" => event.event_type().to_string())
-            .increment(1);
+        counter!(EVENT_BUS_EVENTS_TOTAL, "event_type" => event_type).increment(1);
 
-        debug!(
-            event_type = event.event_type(),
-            handler = self.name(),
-            "Event metrics recorded"
-        );
+        debug!(handler = self.name(), "Event metrics recorded");
 
         Ok(())
     }

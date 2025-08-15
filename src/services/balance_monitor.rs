@@ -42,6 +42,7 @@ pub struct FederationBalance {
 }
 
 /// Service that monitors federation balances for changes
+#[derive(Debug)]
 pub struct BalanceMonitor {
     event_bus: Arc<EventBus>,
     multimint: Arc<MultiMint>,

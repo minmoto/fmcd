@@ -16,6 +16,7 @@ use crate::observability::correlation::RequestContext;
 #[path = "tests.rs"]
 mod tests;
 
+#[derive(Debug)]
 pub struct AppError {
     pub category: ErrorCategory,
     pub message: String,
@@ -83,7 +84,7 @@ impl AppError {
             _ => ErrorCategory::InternalError,
         };
 
-        Self::with_category(category, error.to_string()).with_source(error)
+        Self::with_category(category, error.to_string())
     }
 
     pub fn with_category(category: ErrorCategory, message: impl Into<String>) -> Self {
@@ -149,30 +150,34 @@ impl fmt::Display for AppError {
 
 impl std::error::Error for AppError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.source.as_ref().map(|e| e.as_ref())
+        self.source
+            .as_ref()
+            .map(|e| e.as_ref() as &(dyn std::error::Error + 'static))
     }
 }
 
 // Convert anyhow::Error to AppError (legacy compatibility)
 impl From<anyhow::Error> for AppError {
     fn from(err: anyhow::Error) -> Self {
-        Self::internal_error(err.to_string()).with_source(err)
+        // anyhow::Error already contains the full error chain, so we just use its
+        // string representation
+        Self::internal_error(err.to_string())
     }
 }
 
-// Convert fedimint errors to AppError
-impl From<fedimint_client::ClientError> for AppError {
-    fn from(err: fedimint_client::ClientError) -> Self {
-        use fedimint_client::ClientError;
-
-        let category = match &err {
-            ClientError::ModuleNotFound(_) => ErrorCategory::NotFound,
-            ClientError::EncodingError(_) => ErrorCategory::ValidationError,
-            ClientError::NetworkError(_) => ErrorCategory::NetworkError,
-            ClientError::DatabaseError(_) => ErrorCategory::DatabaseError,
-            _ => ErrorCategory::InternalError,
-        };
-
-        Self::with_category(category, err.to_string())
+// Convert serde_json::Error to AppError
+impl From<serde_json::Error> for AppError {
+    fn from(err: serde_json::Error) -> Self {
+        Self::validation_error(format!("JSON parsing error: {}", err)).with_source(err)
     }
 }
+
+// Convert fedimint_ln_common::lightning_invoice::CreationError to AppError
+impl From<fedimint_ln_common::lightning_invoice::CreationError> for AppError {
+    fn from(err: fedimint_ln_common::lightning_invoice::CreationError) -> Self {
+        Self::validation_error(format!("Invoice creation error: {}", err)).with_source(err)
+    }
+}
+
+// Note: fedimint_client 0.8.0 doesn't export ClientError directly
+// Individual error handling is done at the call site

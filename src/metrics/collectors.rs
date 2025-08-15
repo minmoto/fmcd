@@ -1,10 +1,10 @@
-use std::sync::{Arc, Once};
+use std::sync::Arc;
 use std::time::Instant;
 
 use async_trait::async_trait;
 use lazy_static::lazy_static;
-use metrics::{counter, gauge, histogram, register_counter, register_gauge, register_histogram};
-use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
+use metrics::{counter, gauge, histogram};
+use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
 use tracing::{debug, error, info, warn};
 
 use crate::events::{EventHandler, FmcdEvent};
@@ -43,78 +43,17 @@ lazy_static! {
         Arc::new(tokio::sync::RwLock::new(None));
 }
 
-static METRICS_REGISTERED: Once = Once::new();
-
 /// Initialize Prometheus metrics collection
 pub async fn init_prometheus_metrics() -> anyhow::Result<PrometheusHandle> {
     let builder = PrometheusBuilder::new();
 
     let handle = builder
-        .with_http_listener(([0, 0, 0, 0], 0)) // Bind to any available port
-        .install()
+        .install_recorder()
         .map_err(|e| anyhow::anyhow!("Failed to install Prometheus recorder: {}", e))?;
 
-    // Register all metrics with descriptions and buckets, but only once
-    METRICS_REGISTERED.call_once(|| {
-        // Payment metrics
-        register_counter!(PAYMENTS_TOTAL, "Total number of payment attempts");
-        register_histogram!(
-            PAYMENT_DURATION_SECONDS,
-            "Payment processing duration in seconds"
-        );
-        register_histogram!(PAYMENT_AMOUNT_MSAT, "Payment amounts in millisatoshis");
-        register_histogram!(PAYMENT_FEES_MSAT, "Payment fees in millisatoshis");
-
-        // Invoice metrics
-        register_counter!(INVOICES_TOTAL, "Total number of invoice operations");
-        register_histogram!(INVOICE_AMOUNT_MSAT, "Invoice amounts in millisatoshis");
-
-        // Gateway metrics
-        register_counter!(GATEWAY_SELECTIONS_TOTAL, "Total gateway selection attempts");
-        register_counter!(GATEWAY_FAILURES_TOTAL, "Total gateway failures");
-
-        // Federation metrics
-        register_gauge!(
-            FEDERATION_BALANCE_MSAT,
-            "Current federation balance in millisatoshis"
-        );
-        register_counter!(
-            FEDERATION_CONNECTIONS_TOTAL,
-            "Total federation connection events"
-        );
-
-        // API metrics
-        register_counter!(API_REQUESTS_TOTAL, "Total API requests");
-        register_histogram!(
-            API_REQUEST_DURATION_SECONDS,
-            "API request duration in seconds"
-        );
-
-        // Database metrics
-        register_counter!(DATABASE_QUERIES_TOTAL, "Total database queries");
-        register_histogram!(
-            DATABASE_QUERY_DURATION_SECONDS,
-            "Database query duration in seconds"
-        );
-
-        // Auth metrics
-        register_counter!(AUTH_ATTEMPTS_TOTAL, "Total authentication attempts");
-
-        // Webhook metrics
-        register_counter!(WEBHOOK_DELIVERIES_TOTAL, "Total webhook delivery attempts");
-        register_histogram!(
-            WEBHOOK_DELIVERY_DURATION_SECONDS,
-            "Webhook delivery duration in seconds"
-        );
-
-        // Event bus metrics
-        register_counter!(
-            EVENT_BUS_EVENTS_TOTAL,
-            "Total events published to event bus"
-        );
-
-        info!("All Prometheus metrics registered successfully");
-    });
+    // Metrics are now automatically registered in metrics 0.23 when first used
+    // No need for explicit registration
+    info!("Prometheus metrics collection initialized");
 
     // Store handle for later retrieval
     let mut handle_lock = PROMETHEUS_HANDLE.write().await;

@@ -6,7 +6,7 @@ use axum::extract::Extension;
 use axum::http::StatusCode;
 use axum::response::Json;
 use chrono::{DateTime, Utc};
-use fedimint_client::Client;
+use fedimint_client::{Client, ClientHandleArc};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, warn};
 
@@ -133,9 +133,10 @@ pub async fn health_check(
 
     // Check all federation clients
     let federations = state.multimint.all().await;
-    for (federation_id, client) in federations {
+    for client in federations {
         let fed_check_start = Instant::now();
-        let federation_health = check_federation_health(&client, &federation_id).await;
+        let federation_id = client.config().await.global.calculate_federation_id();
+        let federation_health = check_federation_health(&client, &federation_id.to_string()).await;
         checks.insert(
             format!("federation_{}", federation_id),
             federation_health.with_duration(fed_check_start.elapsed()),
@@ -249,8 +250,9 @@ pub async fn readiness_check(
 
     // Check if at least one federation is healthy
     let mut any_federation_healthy = false;
-    for (federation_id, client) in federations {
-        let fed_health = check_federation_health(&client, &federation_id).await;
+    for client in federations {
+        let federation_id = client.config().await.global.calculate_federation_id();
+        let fed_health = check_federation_health(&client, &federation_id.to_string()).await;
         if matches!(
             fed_health.status,
             HealthState::Healthy | HealthState::Degraded
@@ -318,7 +320,7 @@ async fn test_database_operation(state: &AppState) -> anyhow::Result<serde_json:
 }
 
 /// Check federation health
-async fn check_federation_health(client: &Arc<Client>, federation_id: &str) -> ComponentHealth {
+async fn check_federation_health(client: &ClientHandleArc, federation_id: &str) -> ComponentHealth {
     let start = Instant::now();
 
     // Test federation connectivity and responsiveness
@@ -359,14 +361,15 @@ async fn check_federation_health(client: &Arc<Client>, federation_id: &str) -> C
 }
 
 /// Test federation connectivity
-async fn test_federation_connectivity(client: &Arc<Client>) -> anyhow::Result<serde_json::Value> {
+async fn test_federation_connectivity(
+    client: &ClientHandleArc,
+) -> anyhow::Result<serde_json::Value> {
     // Try to get federation info - this tests connectivity without modifying state
     let config = client.config().await;
 
     Ok(serde_json::json!({
         "federation_name": config.global.federation_name().unwrap_or("Unknown"),
-        "api_version": config.global.api_version,
-        "consensus_version": config.consensus_version,
+        "consensus_version": config.global.consensus_version,
         "module_count": config.modules.len()
     }))
 }
