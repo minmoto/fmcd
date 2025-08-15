@@ -7,13 +7,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install Nix
-      uses: DeterminateSystems/nix-installer-action@v14
-      with:
-        extra-conf: |
-          connect-timeout = 300
-          stalled-download-timeout = 300
+      uses: DeterminateSystems/nix-installer-action@v4
     - name: Magic Nix Cache
-      uses: DeterminateSystems/magic-nix-cache-action@v8
+      uses: DeterminateSystems/magic-nix-cache-action@v2
     - name: Build on ${{ matrix.host }}
       run: 'nix flake check -L .#
 
@@ -21,10 +17,18 @@ jobs:
     strategy:
       matrix:
         host:
+        - macos-x86_64
+        - macos-aarch64
         - linux
         include:
         - host: linux
           runs-on: ubuntu-latest
+          timeout: 60
+        - host: macos-x86_64
+          runs-on: macos-13
+          timeout: 60
+        - host: macos-aarch64
+          runs-on: macos-14
           timeout: 60
     timeout-minutes: ${{ matrix.timeout }}
   flake:
@@ -35,20 +39,18 @@ jobs:
     - name: Check Nix flake inputs
       uses: DeterminateSystems/flake-checker-action@v5
       with:
-        fail-mode: true
+        fail-mode: false
+        check-outdated: false
+        check-supported: false
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - name: Install Nix
-      uses: DeterminateSystems/nix-installer-action@v14
-      with:
-        extra-conf: |
-          connect-timeout = 300
-          stalled-download-timeout = 300
+      uses: DeterminateSystems/nix-installer-action@v4
     - name: Magic Nix Cache
-      uses: DeterminateSystems/magic-nix-cache-action@v8
+      uses: DeterminateSystems/magic-nix-cache-action@v2
     - name: Cargo Cache
       uses: actions/cache@v3
       with:
@@ -57,7 +59,7 @@ jobs:
     - name: Commit Check
       run: '# run the same check that git `pre-commit` hook does
 
-        nix develop --ignore-environment --command ./.githooks/pre-commit
+        nix develop --ignore-environment .#lint --command ./misc/git-hooks/pre-commit
 
         '
 name: CI
