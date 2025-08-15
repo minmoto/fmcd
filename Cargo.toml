@@ -41,7 +41,7 @@ reqwest = { version = "0.12.3", features = [
 ], default-features = false }
 bitcoin = "0.32.7"
 time = { version = "0.3.25", features = ["formatting"] }
-chrono = "0.4.31"
+chrono = { version = "0.4.31", features = ["serde"] }
 futures-util = "0.3.30"
 clap = { version = "3", features = ["derive", "env"] }
 fedimint-api-client = "0.8.0"

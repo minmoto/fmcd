@@ -71,7 +71,7 @@ async fn _invoice(
         })?;
 
     info!(
-        gateway_id = %gateway.info.gateway_id,
+        gateway_id = %gateway.gateway_id,
         federation_id = %req.federation_id,
         amount_msat = %req.amount_msat.msats,
         "Creating invoice with selected gateway"
@@ -89,14 +89,14 @@ async fn _invoice(
 
     // Create invoice tracker using operation_id as invoice_id
     let invoice_tracker = InvoiceTracker::new(
-        operation_id.to_string(),
+        format!("{:?}", operation_id),
         req.federation_id,
         state.event_bus.clone(),
         Some(context),
     );
 
     // Record the operation and invoice IDs in the span
-    span.record("operation_id", &operation_id.to_string());
+    span.record("operation_id", &format!("{:?}", operation_id));
     span.record("invoice_id", invoice_tracker.invoice_id());
 
     // Track invoice creation
@@ -105,7 +105,7 @@ async fn _invoice(
         .await;
 
     info!(
-        operation_id = %operation_id,
+        operation_id = ?operation_id,
         invoice_id = %invoice_tracker.invoice_id(),
         federation_id = %req.federation_id,
         amount_msat = %req.amount_msat.msats,

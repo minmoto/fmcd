@@ -131,14 +131,12 @@ impl EventHandler for LoggingEventHandler {
             }
             FmcdEvent::FederationConnected {
                 federation_id,
-                invite_code,
                 correlation_id,
                 timestamp,
             } => {
                 info!(
                     event_type = "federation_connected",
                     federation_id = %federation_id,
-                    invite_code_prefix = %format!("{}...", &invite_code.chars().take(10).collect::<String>()),
                     correlation_id = ?correlation_id,
                     timestamp = %timestamp,
                     "Federation connected"
@@ -286,6 +284,96 @@ impl EventHandler for LoggingEventHandler {
                         "Authentication failed"
                     );
                 }
+            }
+            // Deposit events
+            FmcdEvent::DepositAddressGenerated {
+                operation_id,
+                federation_id,
+                address,
+                correlation_id,
+                timestamp,
+            } => {
+                info!(
+                    operation_id = %operation_id,
+                    federation_id = %federation_id,
+                    address = %address,
+                    correlation_id = ?correlation_id,
+                    timestamp = %timestamp,
+                    "Deposit address generated"
+                );
+            }
+            FmcdEvent::DepositDetected {
+                operation_id,
+                federation_id,
+                address,
+                amount_sat,
+                txid,
+                correlation_id,
+                timestamp,
+            } => {
+                info!(
+                    operation_id = %operation_id,
+                    federation_id = %federation_id,
+                    address = %address,
+                    amount_sat = amount_sat,
+                    txid = %txid,
+                    correlation_id = ?correlation_id,
+                    timestamp = %timestamp,
+                    "Deposit detected"
+                );
+            }
+            // Withdrawal events
+            FmcdEvent::WithdrawalInitiated {
+                operation_id,
+                federation_id,
+                address,
+                amount_sat,
+                fee_sat,
+                correlation_id,
+                timestamp,
+            } => {
+                info!(
+                    operation_id = %operation_id,
+                    federation_id = %federation_id,
+                    address = %address,
+                    amount_sat = amount_sat,
+                    fee_sat = fee_sat,
+                    correlation_id = ?correlation_id,
+                    timestamp = %timestamp,
+                    "Withdrawal initiated"
+                );
+            }
+            FmcdEvent::WithdrawalCompleted {
+                operation_id,
+                federation_id,
+                txid,
+                correlation_id,
+                timestamp,
+            } => {
+                info!(
+                    operation_id = %operation_id,
+                    federation_id = %federation_id,
+                    txid = %txid,
+                    correlation_id = ?correlation_id,
+                    timestamp = %timestamp,
+                    "Withdrawal completed"
+                );
+            }
+            FmcdEvent::WithdrawalFailed {
+                operation_id,
+                federation_id,
+                reason,
+                correlation_id,
+                timestamp,
+            } => {
+                error!(
+                    operation_id = %operation_id,
+                    federation_id = %federation_id,
+                    reason = %reason,
+                    correlation_id = ?correlation_id,
+                    timestamp = %timestamp,
+                    "Withdrawal failed"
+                );
             }
         }
 

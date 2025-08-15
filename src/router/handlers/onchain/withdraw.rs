@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use anyhow::anyhow;
 use axum::extract::{Extension, State};
 use axum::http::StatusCode;
@@ -22,7 +24,7 @@ use crate::state::AppState;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WithdrawRequest {
-    pub address: Address<NetworkUnchecked>,
+    pub address: String,
     pub amount_sat: BitcoinAmountOrAll,
     pub federation_id: FederationId,
 }
@@ -41,14 +43,19 @@ async fn _withdraw(
     context: RequestContext,
 ) -> Result<WithdrawResponse, AppError> {
     let wallet_module = client.get_first_module::<WalletClientModule>()?;
+
+    // Parse the address - from_str gives us Address<NetworkUnchecked>
+    let address_unchecked = Address::from_str(&req.address)
+        .map_err(|e| AppError::validation_error(format!("Invalid Bitcoin address: {}", e)))?;
+
+    // TODO: Properly validate network - for now assuming valid
+    let address = address_unchecked.assume_checked();
     let (amount, fees) = match req.amount_sat {
         // If the amount is "all", then we need to subtract the fees from
         // the amount we are withdrawing
         BitcoinAmountOrAll::All => {
             let balance = Amount::from_sat(client.get_balance().await.msats / 1000);
-            let fees = wallet_module
-                .get_withdraw_fees(&req.address.clone().assume_checked(), balance)
-                .await?;
+            let fees = wallet_module.get_withdraw_fees(&address, balance).await?;
             let amount = balance.checked_sub(fees.amount());
             let amount = match amount {
                 Some(amount) => amount,
@@ -64,24 +71,20 @@ async fn _withdraw(
         }
         BitcoinAmountOrAll::Amount(amount) => (
             amount,
-            wallet_module
-                .get_withdraw_fees(&req.address.clone().assume_checked(), amount)
-                .await?,
+            wallet_module.get_withdraw_fees(&address, amount).await?,
         ),
     };
     let absolute_fees = fees.amount();
 
     info!("Attempting withdraw with fees: {fees:?}");
 
-    let operation_id = wallet_module
-        .withdraw(&req.address.assume_checked(), amount, fees, ())
-        .await?;
+    let operation_id = wallet_module.withdraw(&address, amount, fees, ()).await?;
 
     // Emit withdrawal initiated event
     let withdrawal_initiated_event = FmcdEvent::WithdrawalInitiated {
-        operation_id: operation_id.to_string(),
+        operation_id: format!("{:?}", operation_id),
         federation_id: req.federation_id.to_string(),
-        address: req.address.to_string(),
+        address: address.to_string(),
         amount_sat: amount.to_sat(),
         fee_sat: absolute_fees.to_sat(),
         correlation_id: Some(context.correlation_id.clone()),
@@ -89,7 +92,7 @@ async fn _withdraw(
     };
     if let Err(e) = state.event_bus.publish(withdrawal_initiated_event).await {
         error!(
-            operation_id = %operation_id,
+            operation_id = ?operation_id,
             correlation_id = %context.correlation_id,
             error = ?e,
             "Failed to publish withdrawal initiated event"
@@ -97,8 +100,8 @@ async fn _withdraw(
     }
 
     info!(
-        operation_id = %operation_id,
-        address = %req.address,
+        operation_id = ?operation_id,
+        address = %address,
         amount_sat = amount.to_sat(),
         fee_sat = absolute_fees.to_sat(),
         "Withdrawal initiated"
@@ -116,7 +119,7 @@ async fn _withdraw(
             WithdrawState::Succeeded(txid) => {
                 // Emit withdrawal completed event
                 let withdrawal_completed_event = FmcdEvent::WithdrawalCompleted {
-                    operation_id: operation_id.to_string(),
+                    operation_id: format!("{:?}", operation_id),
                     federation_id: req.federation_id.to_string(),
                     txid: txid.to_string(),
                     correlation_id: Some(context.correlation_id.clone()),
@@ -124,7 +127,7 @@ async fn _withdraw(
                 };
                 if let Err(e) = state.event_bus.publish(withdrawal_completed_event).await {
                     error!(
-                        operation_id = %operation_id,
+                        operation_id = ?operation_id,
                         correlation_id = %context.correlation_id,
                         txid = %txid,
                         error = ?e,
@@ -133,7 +136,7 @@ async fn _withdraw(
                 }
 
                 info!(
-                    operation_id = %operation_id,
+                    operation_id = ?operation_id,
                     txid = %txid,
                     "Withdrawal completed successfully"
                 );
@@ -148,7 +151,7 @@ async fn _withdraw(
 
                 // Emit withdrawal failed event
                 let withdrawal_failed_event = FmcdEvent::WithdrawalFailed {
-                    operation_id: operation_id.to_string(),
+                    operation_id: format!("{:?}", operation_id),
                     federation_id: req.federation_id.to_string(),
                     reason: error_reason.clone(),
                     correlation_id: Some(context.correlation_id.clone()),
@@ -156,7 +159,7 @@ async fn _withdraw(
                 };
                 if let Err(event_err) = state.event_bus.publish(withdrawal_failed_event).await {
                     error!(
-                        operation_id = %operation_id,
+                        operation_id = ?operation_id,
                         correlation_id = %context.correlation_id,
                         error = ?event_err,
                         "Failed to publish withdrawal failed event"
@@ -164,7 +167,7 @@ async fn _withdraw(
                 }
 
                 error!(
-                    operation_id = %operation_id,
+                    operation_id = ?operation_id,
                     error = ?e,
                     "Withdrawal failed"
                 );
@@ -181,7 +184,7 @@ async fn _withdraw(
     // Emit withdrawal failed event for stream ending without outcome
     let error_reason = "Update stream ended without outcome".to_string();
     let withdrawal_failed_event = FmcdEvent::WithdrawalFailed {
-        operation_id: operation_id.to_string(),
+        operation_id: format!("{:?}", operation_id),
         federation_id: req.federation_id.to_string(),
         reason: error_reason.clone(),
         correlation_id: Some(context.correlation_id.clone()),
@@ -189,7 +192,7 @@ async fn _withdraw(
     };
     if let Err(e) = state.event_bus.publish(withdrawal_failed_event).await {
         error!(
-            operation_id = %operation_id,
+            operation_id = ?operation_id,
             correlation_id = %context.correlation_id,
             error = ?e,
             "Failed to publish withdrawal failed event for stream timeout"
@@ -197,7 +200,7 @@ async fn _withdraw(
     }
 
     error!(
-        operation_id = %operation_id,
+        operation_id = ?operation_id,
         "Update stream ended without outcome"
     );
 

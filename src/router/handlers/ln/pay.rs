@@ -68,7 +68,7 @@ async fn _pay(
     // Initialize payment tracker
     let mut payment_tracker = PaymentTracker::new(
         req.federation_id,
-        &bolt11,
+        &bolt11.to_string(),
         req.amount_msat.map(|a| a.msats).unwrap_or(0),
         state.event_bus.clone(),
         Some(context.clone()),
@@ -86,7 +86,7 @@ async fn _pay(
     // Track payment initiation
     payment_tracker
         .initiate(
-            bolt11.clone(),
+            bolt11.to_string(),
             req.amount_msat.map(|a| a.msats).unwrap_or(0),
         )
         .await;
@@ -125,23 +125,24 @@ async fn _pay(
             });
 
             AppError::with_category(
-                ErrorCategory::FederationError,
-                "Lightning module not available",
+                ErrorCategory::FederationUnavailable,
+                format!("Lightning module not available: {}", e),
             )
-            .with_source(e)
             .with_context(context.clone())
         })?;
 
     // Select gateway with enhanced error handling
-    let gateway = lightning_module
-        .select_gateway(&req.gateway_id)
-        .await
-        .ok_or_else(|| {
+    let gateway = lightning_module.select_gateway(&req.gateway_id).await;
+
+    let gateway = match gateway {
+        Some(gateway) => gateway,
+        None => {
             let error_msg = format!("Gateway {} not available", req.gateway_id);
+            let available_gateways = lightning_module.list_gateways().await;
             error!(
                 gateway_id = %req.gateway_id,
                 payment_id = %payment_tracker.payment_id(),
-                available_gateways = ?lightning_module.list_gateways(),
+                available_gateways = ?available_gateways,
                 "Gateway selection failed"
             );
 
@@ -167,16 +168,17 @@ async fn _pay(
                 let _ = event_bus.publish(event).await;
             });
 
-            AppError::gateway_error(error_msg).with_context(context.clone())
-        })?;
+            return Err(AppError::gateway_error(error_msg).with_context(context.clone()));
+        }
+    };
 
     // Track gateway selection
     payment_tracker
-        .gateway_selected(gateway.info.gateway_id.to_string())
+        .gateway_selected(gateway.gateway_id.to_string())
         .await;
 
     info!(
-        gateway_id = %gateway.info.gateway_id,
+        gateway_id = %gateway.gateway_id,
         payment_id = %payment_tracker.payment_id(),
         "Gateway selected successfully"
     );
@@ -223,17 +225,16 @@ async fn _pay(
                 let _ = event_bus.publish(event).await;
             });
 
-            AppError::gateway_error("Payment execution failed")
-                .with_source(e)
+            AppError::gateway_error(format!("Payment execution failed: {}", e))
                 .with_context(context.clone())
         })?;
 
     let operation_id = payment_type.operation_id();
-    span.record("operation_id", &operation_id.to_string());
+    span.record("operation_id", &format!("{:?}", operation_id));
     span.record("payment_status", "executing");
 
     info!(
-        operation_id = %operation_id,
+        operation_id = ?operation_id,
         fee_msat = %fee.msats,
         contract_id = %contract_id,
         "Payment initiated successfully"
@@ -245,7 +246,7 @@ async fn _pay(
         .ok_or_else(|| {
             let error_msg = "Payment failed or timed out".to_string();
             error!(
-                operation_id = %operation_id,
+                operation_id = ?operation_id,
                 payment_id = %payment_tracker.payment_id(),
                 "Payment failed or timed out"
             );
@@ -283,7 +284,7 @@ async fn _pay(
 
     span.record("payment_status", "completed");
     info!(
-        operation_id = %operation_id,
+        operation_id = ?operation_id,
         payment_id = %payment_tracker.payment_id(),
         preimage = %sanitize_preimage(&result.preimage),
         "Payment completed successfully"
