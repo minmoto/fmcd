@@ -152,43 +152,29 @@ impl Config {
         }
 
         let mut config = if path.exists() {
-            Self::load_from_file(path)?
+            match Self::load_from_file(path) {
+                Ok(cfg) => cfg,
+                Err(_) => {
+                    // If config file is corrupted, recreate it
+                    let cfg = Self::default();
+                    cfg.save_to_file(path)?;
+                    cfg
+                }
+            }
         } else {
             let config = Self::default();
             config.save_to_file(path)?;
             config
         };
 
-        // Check if we need to generate and append password
+        // Check if we need to generate password
         if config.http_password.is_none() {
             let generated_password = Self::generate_password();
-
-            // Read existing content
-            let existing_content = std::fs::read_to_string(path)?;
-
-            // Prepare new content with password appended
-            let new_content = format!(
-                "{}\nhttp-password = \"{}\"\n",
-                existing_content.trim_end(),
-                generated_password
-            );
-
-            // Write atomically using a temporary file
-            let temp_path = path.with_extension("tmp");
-            std::fs::write(&temp_path, new_content)?;
-
-            // Atomically rename temp file to actual config file
-            // This ensures we either have the old config or the new one with password
-            // but never a corrupted state
-            if let Err(e) = std::fs::rename(&temp_path, path) {
-                // Clean up temp file if rename failed
-                let _ = std::fs::remove_file(&temp_path);
-                return Err(e.into());
-            }
-
-            // Update in-memory config
             config.http_password = Some(generated_password);
             password_generated = true;
+
+            // Save the complete config with the password properly in the structure
+            config.save_to_file(path)?;
         }
 
         Ok((config, password_generated))
@@ -197,7 +183,17 @@ impl Config {
 
 // Default value functions
 fn default_bind_ip() -> String {
-    "127.0.0.1".to_string()
+    // Use 0.0.0.0 in containerized environments to allow external connections
+    // Check for common container environment indicators
+    if std::env::var("DOCKER_CONTAINER").is_ok()
+        || std::env::var("FMCD_ADDR").is_ok()
+        || std::path::Path::new("/.dockerenv").exists()
+        || std::env::var("KUBERNETES_SERVICE_HOST").is_ok()
+    {
+        "0.0.0.0".to_string()
+    } else {
+        "127.0.0.1".to_string()
+    }
 }
 
 fn default_bind_port() -> u16 {
