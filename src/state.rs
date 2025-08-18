@@ -19,7 +19,7 @@ use crate::webhooks::{WebhookConfig, WebhookNotifier};
 #[cfg(test)]
 #[path = "state_tests.rs"]
 mod tests;
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AppState {
     pub multimint: MultiMint,
     pub start_time: Instant,

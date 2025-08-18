@@ -7,10 +7,12 @@ use futures_util::stream::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 use super::handlers;
 use crate::auth::{AuthenticatedMessage, WebSocketAuth};
 use crate::error::AppError;
+use crate::observability::correlation::RequestContext;
 use crate::state::AppState;
 
 const JSONRPC_VERSION: &str = "2.0";
@@ -70,9 +72,11 @@ pub enum JsonRpcMethod {
     MintValidate,
     MintSplit,
     MintCombine,
+    // Lightning API methods
     LnInvoice,
+    LnStatus,
+    LnStatusBulk,
     LnInvoiceExternalPubkeyTweaked,
-    LnAwaitInvoice,
     LnClaimExternalReceiveTweaked,
     LnPay,
     LnListGateways,
@@ -86,9 +90,18 @@ async fn handle_socket(
     state: AppState,
     auth: Arc<WebSocketAuth>,
 ) -> Result<(), anyhow::Error> {
+    // Create a session-level correlation ID for this WebSocket connection
+    let session_correlation_id = Uuid::new_v4().to_string();
+
     while let Some(Ok(msg)) = socket.next().await {
         if let Message::Text(text) = msg {
-            info!("Received WebSocket message");
+            // Create a new RequestContext for each message, using session correlation ID
+            let message_context = RequestContext::new(Some(session_correlation_id.clone()));
+            info!(
+                correlation_id = %message_context.correlation_id,
+                request_id = %message_context.request_id,
+                "Received WebSocket message"
+            );
 
             // If authentication is enabled, expect authenticated messages
             if auth.is_enabled() {
@@ -117,7 +130,7 @@ async fn handle_socket(
                     }
                 };
 
-                let res = match_method(req.clone(), state.clone()).await;
+                let res = match_method(req.clone(), state.clone(), message_context.clone()).await;
                 let res_msg = create_json_rpc_response(res, req.id);
 
                 // Send response as authenticated message
@@ -137,7 +150,7 @@ async fn handle_socket(
                     }
                 };
 
-                let res = match_method(req.clone(), state.clone()).await;
+                let res = match_method(req.clone(), state.clone(), message_context.clone()).await;
                 let res_msg = create_json_rpc_response(res, req.id);
                 let response_text = serde_json::to_string(&res_msg)?;
                 socket.send(Message::Text(response_text)).await?;
@@ -214,17 +227,21 @@ async fn send_auth_error(socket: &mut WebSocket, message: &str) -> Result<(), an
     Ok(())
 }
 
-async fn match_method(req: JsonRpcRequest, state: AppState) -> Result<Value, AppError> {
+async fn match_method(
+    req: JsonRpcRequest,
+    state: AppState,
+    context: RequestContext,
+) -> Result<Value, AppError> {
     match req.method {
         JsonRpcMethod::AdminBackup => {
             handlers::admin::backup::handle_ws(state.clone(), req.params).await
         }
         JsonRpcMethod::AdminConfig => handlers::admin::config::handle_ws(state.clone()).await,
         JsonRpcMethod::AdminDiscoverVersion => {
-            handlers::admin::discover_version::handle_ws(state.clone()).await
+            handlers::admin::version::handle_ws(state.clone()).await
         }
         JsonRpcMethod::AdminFederationIds => {
-            handlers::admin::federation_ids::handle_ws(state.clone(), req.params).await
+            handlers::admin::federations::handle_ws(state.clone(), req.params).await
         }
         JsonRpcMethod::AdminInfo => {
             handlers::admin::info::handle_ws(state.clone(), req.params).await
@@ -239,7 +256,7 @@ async fn match_method(req: JsonRpcRequest, state: AppState) -> Result<Value, App
             handlers::admin::restore::handle_ws(state.clone(), req.params).await
         }
         JsonRpcMethod::AdminListOperations => {
-            handlers::admin::list_operations::handle_ws(state.clone(), req.params).await
+            handlers::admin::operations::handle_ws(state.clone(), req.params).await
         }
         JsonRpcMethod::MintDecodeNotes => handlers::mint::decode_notes::handle_ws(req.params).await,
         JsonRpcMethod::MintEncodeNotes => handlers::mint::encode_notes::handle_ws(req.params).await,
@@ -254,22 +271,32 @@ async fn match_method(req: JsonRpcRequest, state: AppState) -> Result<Value, App
         }
         JsonRpcMethod::MintSplit => handlers::mint::split::handle_ws(req.params).await,
         JsonRpcMethod::MintCombine => handlers::mint::combine::handle_ws(req.params).await,
+
+        // Lightning API methods - aligns with fedimint client 0.8 behavior
         JsonRpcMethod::LnInvoice => {
-            handlers::ln::invoice::handle_ws(state.clone(), req.params).await
+            handlers::ln::invoice::handle_ws_with_context(state.clone(), req.params, context).await
+        }
+        JsonRpcMethod::LnStatus => handlers::ln::status::handle_ws(state.clone(), req.params).await,
+        JsonRpcMethod::LnStatusBulk => {
+            // For bulk operations, parse as bulk request
+            let bulk_req = serde_json::from_value(req.params)?;
+            let response = handlers::ln::status::handle_bulk_status(
+                axum::extract::State(state),
+                axum::Json(bulk_req),
+            )
+            .await?;
+            Ok(serde_json::to_value(response.0)?)
         }
         JsonRpcMethod::LnInvoiceExternalPubkeyTweaked => {
             handlers::ln::invoice_external_pubkey_tweaked::handle_ws(state.clone(), req.params)
                 .await
-        }
-        JsonRpcMethod::LnAwaitInvoice => {
-            handlers::ln::await_invoice::handle_ws(state.clone(), req.params).await
         }
         JsonRpcMethod::LnClaimExternalReceiveTweaked => {
             handlers::ln::claim_external_receive_tweaked::handle_ws(state.clone(), req.params).await
         }
         JsonRpcMethod::LnPay => handlers::ln::pay::handle_ws(state.clone(), req.params).await,
         JsonRpcMethod::LnListGateways => {
-            handlers::ln::list_gateways::handle_ws(state.clone(), req.params).await
+            handlers::ln::gateways::handle_ws(state.clone(), req.params).await
         }
         JsonRpcMethod::WalletDepositAddress => {
             handlers::onchain::deposit_address::handle_ws(state.clone(), req.params).await

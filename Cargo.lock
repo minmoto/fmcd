@@ -2011,6 +2011,7 @@ name = "fmcd"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-stream",
  "async-trait",
  "async-utility",
  "axum",
@@ -2049,6 +2050,7 @@ dependencies = [
  "tempfile",
  "time",
  "tokio",
+ "tokio-stream",
  "toml",
  "tower 0.4.13",
  "tower-http 0.5.2",

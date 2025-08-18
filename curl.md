@@ -21,7 +21,7 @@ curl http://localhost:3333/v2/admin/info -H "Authorization: Bearer password" | j
 Get a gateway ID for a federation:
 
 ```
-curl -v -X POST http://localhost:3333/v2/ln/list-gateways -H "Authorization: Bearer password" -H "Content-type: application/json" -d '{"federationId" :
+curl -v -X POST http://localhost:3333/v2/ln/gateways -H "Authorization: Bearer password" -H "Content-type: application/json" -d '{"federationId" :
 "15db8cb4f1ec8e484d73b889372bec94812580f929e8148b7437d359af422cd3"}'
 ```
 
