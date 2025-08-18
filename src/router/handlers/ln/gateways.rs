@@ -17,7 +17,7 @@ pub struct ListGatewaysRequest {
     pub federation_id: FederationId,
 }
 
-async fn _list_gateways(client: ClientHandleArc) -> Result<Value, AppError> {
+async fn _gateways(client: ClientHandleArc) -> Result<Value, AppError> {
     let lightning_module = client.get_first_module::<LightningClientModule>()?;
     let gateways = lightning_module.list_gateways().await;
     if gateways.is_empty() {
@@ -43,7 +43,7 @@ pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
     let v = serde_json::from_value::<ListGatewaysRequest>(v)
         .map_err(|e| AppError::new(StatusCode::BAD_REQUEST, anyhow!("Invalid request: {}", e)))?;
     let client = state.get_client(v.federation_id).await?;
-    let gateways = _list_gateways(client).await?;
+    let gateways = _gateways(client).await?;
     let gateways_json = json!(gateways);
     Ok(gateways_json)
 }
@@ -54,6 +54,6 @@ pub async fn handle_rest(
     Json(req): Json<ListGatewaysRequest>,
 ) -> Result<Json<Value>, AppError> {
     let client = state.get_client(req.federation_id).await?;
-    let gateways = _list_gateways(client).await?;
+    let gateways = _gateways(client).await?;
     Ok(Json(gateways))
 }

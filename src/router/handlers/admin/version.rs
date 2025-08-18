@@ -8,7 +8,7 @@ use crate::error::AppError;
 use crate::multimint::MultiMint;
 use crate::state::AppState;
 
-async fn _discover_version(multimint: MultiMint) -> Result<Value, AppError> {
+async fn _version(multimint: MultiMint) -> Result<Value, AppError> {
     let mut api_versions = HashMap::new();
     for (id, client) in multimint.clients.lock().await.iter() {
         api_versions.insert(
@@ -20,13 +20,13 @@ async fn _discover_version(multimint: MultiMint) -> Result<Value, AppError> {
 }
 
 pub async fn handle_ws(state: AppState) -> Result<Value, AppError> {
-    let version = _discover_version(state.multimint).await?;
+    let version = _version(state.multimint).await?;
     let version_json = json!(version);
     Ok(version_json)
 }
 
 #[axum_macros::debug_handler]
 pub async fn handle_rest(State(state): State<AppState>) -> Result<Json<Value>, AppError> {
-    let version = _discover_version(state.multimint).await?;
+    let version = _version(state.multimint).await?;
     Ok(Json(version))
 }

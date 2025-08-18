@@ -56,9 +56,9 @@ curl http://localhost:7070/v2/admin/info \
 
 - `/v2/admin/info`: Display wallet info (holdings, tiers).
 - `/v2/admin/backup`: Upload the (encrypted) snapshot of mint notes to federation.
-- `/v2/admin/discover-version`: Discover the common api version to use to communicate with the federation.
+- `/v2/admin/version`: Discover the common api version to use to communicate with the federation.
 - `/v2/admin/restore`: Restore the previously created backup of mint notes (with `backup` command).
-- `/v2/admin/list-operations`: List operations.
+- `/v2/admin/operations`: List operations.
 - `/v2/admin/module`: Call a module subcommand.
 - `/v2/admin/config`: Returns the client config.
 
@@ -76,7 +76,7 @@ curl http://localhost:7070/v2/admin/info \
 - `/v2/ln/await-invoice`: Wait for incoming invoice to be paid.
 - `/v2/ln/pay`: Pay a lightning invoice or lnurl via a gateway.
 - `/v2/ln/await-pay`: Wait for a lightning payment to complete.
-- `/v2/ln/list-gateways`: List registered gateways.
+- `/v2/ln/gateways`: List registered gateways.
 - `/v2/ln/switch-gateway`: Switch active gateway.
 
 ### Onchain related commands:
@@ -197,11 +197,8 @@ docker logs fmcd | grep "Generating"
 Build your own OCI image using Nix:
 
 ```bash
-# Build the OCI container
-nix build .#oci
-
-# Load into Docker
-docker load < ./result
+# Build the OCI container and Load into Docker
+nix build .#oci && docker load < ./result
 
 # Verify the image
 docker image ls | grep fmcd

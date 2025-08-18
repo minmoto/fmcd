@@ -282,13 +282,13 @@ async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
 /// Implements Fedimint V0.2 API Route matching against CLI commands:
 /// - `/v2/admin/backup`: Upload the (encrypted) snapshot of mint notes to
 ///   federation.
-/// - `/v2/admin/discover-version`: Discover the common api version to use to
-///   communicate with the federation.
+/// - `/v2/admin/version`: Discover the common api version to use to communicate
+///   with the federation.
 /// - `/v2/admin/info`: Display wallet info (holdings, tiers).
 /// - `/v2/admin/join`: Join a federation with an invite code.
 /// - `/v2/admin/restore`: Restore the previously created backup of mint notes
 ///   (with `backup` command).
-/// - `/v2/admin/list-operations`: List operations.
+/// - `/v2/admin/operations`: List operations.
 /// - `/v2/admin/module`: Call a module subcommand.
 /// - `/v2/admin/config`: Returns the client config.
 ///
@@ -311,7 +311,7 @@ async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
 /// - `/v2/ln/claim-external-receive-tweaked`: Claim an external receive.
 /// - `/v2/ln/pay`: Pay a lightning invoice or lnurl via a gateway.
 /// - `/v2/ln/await-pay`: Wait for a lightning payment to complete.
-/// - `/v2/ln/list-gateways`: List registered gateways.
+/// - `/v2/ln/gateways`: List registered gateways.
 /// - `/v2/ln/switch-gateway`: Switch active gateway.
 ///
 /// Onchain related commands:
@@ -331,18 +331,32 @@ fn fedimint_v2_rest() -> Router<AppState> {
         .route("/combine", post(mint::combine::handle_rest));
 
     let ln_router = Router::new()
+        // Modern API endpoints - aligns with fedimint client 0.8 behavior
         .route("/invoice", post(ln::invoice::handle_rest))
+        .route("/invoice/status/bulk", post(ln::status::handle_bulk_status))
+        .route(
+            "/operation/:operation_id/status",
+            get(ln::status::handle_rest_by_operation_id),
+        )
+        .route(
+            "/operation/:operation_id/stream",
+            get(ln::stream::handle_operation_stream),
+        )
+        .route(
+            "/events/stream",
+            get(ln::stream::handle_global_event_stream),
+        )
+        // Other LN endpoints
         .route(
             "/invoice-external-pubkey-tweaked",
             post(ln::invoice_external_pubkey_tweaked::handle_rest),
         )
-        .route("/await-invoice", post(ln::await_invoice::handle_rest))
         .route(
             "/claim-external-receive-tweaked",
             post(ln::claim_external_receive_tweaked::handle_rest),
         )
         .route("/pay", post(ln::pay::handle_rest))
-        .route("/list-gateways", post(ln::list_gateways::handle_rest));
+        .route("/gateways", post(ln::gateways::handle_rest));
 
     let onchain_router = Router::new()
         .route(
@@ -354,20 +368,14 @@ fn fedimint_v2_rest() -> Router<AppState> {
 
     let admin_router = Router::new()
         .route("/backup", post(admin::backup::handle_rest))
-        .route(
-            "/discover-version",
-            post(admin::discover_version::handle_rest),
-        )
-        .route("/federation-ids", get(admin::federation_ids::handle_rest))
+        .route("/version", post(admin::version::handle_rest))
+        .route("/federations", get(admin::federations::handle_rest))
         .route("/info", get(admin::info::handle_rest))
         .route("/join", post(admin::join::handle_rest))
         .route("/restore", post(admin::restore::handle_rest))
         // .route("/printsecret", get(handle_printsecret)) TODO: should I expose this
         // under admin?
-        .route(
-            "/list-operations",
-            post(admin::list_operations::handle_rest),
-        )
+        .route("/operations", post(admin::operations::handle_rest))
         .route("/module", post(admin::module::handle_rest))
         .route("/config", get(admin::config::handle_rest));
 

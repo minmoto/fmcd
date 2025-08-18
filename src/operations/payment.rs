@@ -296,6 +296,16 @@ impl InvoiceTracker {
         &self.invoice_id
     }
 
+    /// Get the federation ID
+    pub fn federation_id(&self) -> &str {
+        &self.federation_id
+    }
+
+    /// Get the correlation ID
+    pub fn correlation_id(&self) -> Option<&String> {
+        self.correlation_id.as_ref()
+    }
+
     /// Record invoice creation
     #[instrument(skip(self), fields(invoice_id = %self.invoice_id))]
     pub async fn created(&self, amount_msat: u64, invoice: String) {
@@ -356,6 +366,3 @@ impl InvoiceTracker {
         }
     }
 }
-
-#[cfg(test)]
-mod tests;

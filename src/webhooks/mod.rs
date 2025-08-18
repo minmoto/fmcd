@@ -1,3 +1,4 @@
+pub mod invoice;
 pub mod notifier;
 
 #[cfg(test)]

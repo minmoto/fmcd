@@ -333,7 +333,7 @@ impl WebhookNotifier {
 
         let event_type = event.event_type();
         let event_id = event.event_id();
-        let timestamp = event.timestamp();
+        let _timestamp = event.timestamp();
 
         debug!(
             event_id = %event_id,

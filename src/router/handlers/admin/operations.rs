@@ -32,7 +32,7 @@ pub struct OperationOutput {
     pub outcome: Option<serde_json::Value>,
 }
 
-async fn _list_operations(
+async fn _operations(
     client: ClientHandleArc,
     req: ListOperationsRequest,
 ) -> Result<Value, AppError> {
@@ -85,7 +85,7 @@ pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
         )
     })?;
     let client = state.get_client(v.federation_id).await?;
-    let operations = _list_operations(client, v).await?;
+    let operations = _operations(client, v).await?;
     let operations_json = json!(operations);
     Ok(operations_json)
 }
@@ -96,6 +96,6 @@ pub async fn handle_rest(
     Json(req): Json<ListOperationsRequest>,
 ) -> Result<Json<Value>, AppError> {
     let client = state.get_client(req.federation_id).await?;
-    let operations = _list_operations(client, req).await?;
+    let operations = _operations(client, req).await?;
     Ok(Json(operations))
 }
