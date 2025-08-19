@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use lazy_static::lazy_static;
 use metrics::{counter, gauge, histogram};
 use metrics_exporter_prometheus::{PrometheusBuilder, PrometheusHandle};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 use crate::events::{EventHandler, FmcdEvent};
 
@@ -98,18 +98,12 @@ impl MetricsCollector {
                     "Recorded payment initiation metrics"
                 );
             }
-            FmcdEvent::PaymentSucceeded {
-                federation_id,
-                fee_msat,
-                ..
-            } => {
+            FmcdEvent::PaymentSucceeded { federation_id, .. } => {
                 counter!(PAYMENTS_TOTAL, "federation_id" => federation_id.clone(), "status" => "succeeded").increment(1);
-                histogram!(PAYMENT_FEES_MSAT, "federation_id" => federation_id.clone())
-                    .record(*fee_msat as f64);
+                // Note: fee_msat is not available in PaymentSucceeded event
 
                 debug!(
                     federation_id = %federation_id,
-                    fee_msat = fee_msat,
                     "Recorded payment success metrics"
                 );
             }
@@ -150,16 +144,16 @@ impl MetricsCollector {
             }
             FmcdEvent::InvoicePaid {
                 federation_id,
-                amount_received_msat,
+                amount_msat,
                 ..
             } => {
                 counter!(INVOICES_TOTAL, "federation_id" => federation_id.clone(), "status" => "paid").increment(1);
                 histogram!(INVOICE_AMOUNT_MSAT, "federation_id" => federation_id.clone())
-                    .record(*amount_received_msat as f64);
+                    .record(*amount_msat as f64);
 
                 debug!(
                     federation_id = %federation_id,
-                    amount_received_msat = amount_received_msat,
+                    amount_msat = amount_msat,
                     "Recorded invoice payment metrics"
                 );
             }
@@ -483,11 +477,10 @@ mod tests {
         let collector = MetricsCollector::new();
 
         let event = FmcdEvent::PaymentSucceeded {
-            payment_id: "test-payment".to_string(),
+            operation_id: "test-payment".to_string(),
             federation_id: "test-fed".to_string(),
+            amount_msat: 50000,
             preimage: "test-preimage".to_string(),
-            fee_msat: 1000,
-            correlation_id: Some("test-correlation".to_string()),
             timestamp: Utc::now(),
         };
 

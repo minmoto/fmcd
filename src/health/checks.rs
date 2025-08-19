@@ -6,7 +6,7 @@ use axum::extract::Extension;
 use axum::http::StatusCode;
 use axum::response::Json;
 use chrono::{DateTime, Utc};
-use fedimint_client::{Client, ClientHandleArc};
+use fedimint_client::ClientHandleArc;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info, warn};
 

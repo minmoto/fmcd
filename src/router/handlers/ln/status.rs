@@ -10,7 +10,7 @@ use fedimint_ln_client::{LightningClientModule, LnReceiveState};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tracing::{error, info, instrument};
+use tracing::{error, info, instrument, warn};
 
 use crate::error::AppError;
 use crate::router::handlers::ln::invoice::{InvoiceStatus, SettlementInfo};
@@ -50,6 +50,19 @@ async fn _get_status(
     let span = tracing::Span::current();
     let lightning_module = client.get_first_module::<LightningClientModule>()?;
 
+    // Try to get the invoice amount from operation metadata
+    let invoice_amount_msat = client
+        .operation_log()
+        .get_operation(operation_id)
+        .await
+        .and_then(|op| {
+            // Extract amount from operation metadata if available
+            op.meta::<serde_json::Value>()
+                .get("amount")
+                .and_then(|v| v.as_u64())
+        })
+        .unwrap_or(0); // Default to 0 if not found
+
     // Use fedimint's native subscribe_ln_receive to get current state
     let current_state = match lightning_module.subscribe_ln_receive(operation_id).await {
         Ok(stream) => {
@@ -86,15 +99,21 @@ async fn _get_status(
         LnReceiveState::WaitingForPayment { .. } => (InvoiceStatus::Pending, None),
         LnReceiveState::Claimed => {
             // NOTE: Fedimint's LnReceiveState::Claimed doesn't include settlement details
-            // This would require API enhancements to expose:
-            // - Actual amount received (may differ from invoice amount due to fees)
-            // - Payment preimage
-            // - Gateway fees
-            // - Exact settlement timestamp
-            // For now using placeholders, consider querying operation metadata as
-            // workaround
+            // The actual amount received might differ from invoice amount due to fees.
+            // Using the invoice amount from operation metadata as a reasonable
+            // approximation. This ensures API consumers receive meaningful data
+            // rather than 0.
             let settlement_info = SettlementInfo {
-                amount_received_msat: 0,  // Pending fedimint API enhancement
+                amount_received_msat: if invoice_amount_msat > 0 {
+                    invoice_amount_msat
+                } else {
+                    // Log warning if amount is not available
+                    warn!(
+                        operation_id = ?operation_id,
+                        "Invoice amount not found in operation metadata, using 0"
+                    );
+                    0
+                },
                 settled_at: last_updated, // Using current time as approximation
                 preimage: None,           // Not exposed in current API
                 gateway_fee_msat: None,   // Not exposed in current API

@@ -2,9 +2,7 @@ use async_trait::async_trait;
 use tracing::{debug, error, info, warn};
 
 use crate::events::{EventHandler, FmcdEvent};
-use crate::observability::sanitization::{
-    sanitize_invoice, sanitize_payment_hash, sanitize_preimage,
-};
+use crate::observability::sanitization::{sanitize_invoice, sanitize_preimage};
 
 /// Event handler that logs all events with appropriate levels and sanitization
 pub struct LoggingEventHandler {
@@ -43,20 +41,18 @@ impl EventHandler for LoggingEventHandler {
                 );
             }
             FmcdEvent::PaymentSucceeded {
-                payment_id,
+                operation_id,
                 federation_id,
+                amount_msat,
                 preimage,
-                fee_msat,
-                correlation_id,
                 timestamp,
             } => {
                 info!(
                     event_type = "payment_succeeded",
-                    payment_id = %payment_id,
+                    operation_id = %operation_id,
                     federation_id = %federation_id,
+                    amount_msat = amount_msat,
                     preimage = %sanitize_preimage(&preimage),
-                    fee_msat = fee_msat,
-                    correlation_id = ?correlation_id,
                     timestamp = %timestamp,
                     "Payment succeeded"
                 );
@@ -98,17 +94,17 @@ impl EventHandler for LoggingEventHandler {
                 );
             }
             FmcdEvent::InvoicePaid {
-                invoice_id,
+                operation_id,
                 federation_id,
-                amount_received_msat,
+                amount_msat,
                 correlation_id,
                 timestamp,
             } => {
                 info!(
                     event_type = "invoice_paid",
-                    invoice_id = %invoice_id,
+                    operation_id = %operation_id,
                     federation_id = %federation_id,
-                    amount_received_msat = amount_received_msat,
+                    amount_msat = amount_msat,
                     correlation_id = ?correlation_id,
                     timestamp = %timestamp,
                     "Invoice paid"
@@ -343,20 +339,21 @@ impl EventHandler for LoggingEventHandler {
                     "Withdrawal initiated"
                 );
             }
-            FmcdEvent::WithdrawalCompleted {
+            FmcdEvent::WithdrawalSucceeded {
                 operation_id,
                 federation_id,
+                amount_sat,
                 txid,
-                correlation_id,
                 timestamp,
             } => {
                 info!(
+                    event_type = "withdrawal_succeeded",
                     operation_id = %operation_id,
                     federation_id = %federation_id,
+                    amount_sat = amount_sat,
                     txid = %txid,
-                    correlation_id = ?correlation_id,
                     timestamp = %timestamp,
-                    "Withdrawal completed"
+                    "Withdrawal succeeded"
                 );
             }
             FmcdEvent::WithdrawalFailed {
@@ -373,6 +370,40 @@ impl EventHandler for LoggingEventHandler {
                     correlation_id = ?correlation_id,
                     timestamp = %timestamp,
                     "Withdrawal failed"
+                );
+            }
+            FmcdEvent::PaymentRefunded {
+                operation_id,
+                federation_id,
+                reason,
+                timestamp,
+            } => {
+                info!(
+                    event_type = "payment_refunded",
+                    operation_id = %operation_id,
+                    federation_id = %federation_id,
+                    reason = %reason,
+                    timestamp = %timestamp,
+                    "Payment refunded"
+                );
+            }
+            FmcdEvent::DepositClaimed {
+                operation_id,
+                federation_id,
+                amount_sat,
+                txid,
+                correlation_id,
+                timestamp,
+            } => {
+                info!(
+                    event_type = "deposit_claimed",
+                    operation_id = %operation_id,
+                    federation_id = %federation_id,
+                    amount_sat = amount_sat,
+                    txid = %txid,
+                    correlation_id = ?correlation_id,
+                    timestamp = %timestamp,
+                    "Deposit claimed"
                 );
             }
         }

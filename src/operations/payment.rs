@@ -3,7 +3,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Utc};
 use fedimint_core::config::FederationId;
 use sha2::{Digest, Sha256};
-use tracing::{info_span, instrument, Instrument, Span};
+use tracing::{info_span, instrument, Span};
 
 use crate::events::{EventBus, FmcdEvent};
 use crate::observability::correlation::RequestContext;
@@ -184,7 +184,7 @@ impl PaymentTracker {
 
     /// Mark payment as succeeded and publish event
     #[instrument(skip(self), fields(payment_id = %self.payment_id))]
-    pub async fn succeed(&mut self, preimage: String, fee_msat: u64) {
+    pub async fn succeed(&mut self, preimage: String, amount_msat: u64, fee_msat: u64) {
         self.state = PaymentState::Succeeded;
         self.span.record("state", self.state.as_str());
         self.span.record("fee_msat", fee_msat);
@@ -194,11 +194,10 @@ impl PaymentTracker {
         self.span.record("duration_ms", duration.num_milliseconds());
 
         let event = FmcdEvent::PaymentSucceeded {
-            payment_id: self.payment_id.clone(),
+            operation_id: self.payment_id.clone(),
             federation_id: self.federation_id.clone(),
+            amount_msat,
             preimage,
-            fee_msat,
-            correlation_id: self.correlation_id.clone(),
             timestamp: Utc::now(),
         };
 
@@ -331,9 +330,9 @@ impl InvoiceTracker {
     #[instrument(skip(self), fields(invoice_id = %self.invoice_id))]
     pub async fn paid(&self, amount_received_msat: u64) {
         let event = FmcdEvent::InvoicePaid {
-            invoice_id: self.invoice_id.clone(),
+            operation_id: self.invoice_id.clone(), // Using invoice_id as operation_id
             federation_id: self.federation_id.clone(),
-            amount_received_msat,
+            amount_msat: amount_received_msat,
             correlation_id: self.correlation_id.clone(),
             timestamp: Utc::now(),
         };

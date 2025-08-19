@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -7,12 +7,12 @@ use chrono::Utc;
 use fedimint_client::ClientHandleArc;
 use fedimint_core::config::FederationId;
 use fedimint_core::core::OperationId;
-use fedimint_ln_common::bitcoin::{Address, OutPoint};
+use fedimint_ln_common::bitcoin::OutPoint;
 use fedimint_wallet_client::{DepositStateV2, WalletClientModule};
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, Mutex, RwLock};
-use tokio::time::{interval, sleep};
+use tokio::time::interval;
 use tracing::{debug, error, info, instrument, warn};
 
 use crate::events::{EventBus, FmcdEvent};

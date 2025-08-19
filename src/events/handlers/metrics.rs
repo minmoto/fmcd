@@ -1,9 +1,6 @@
-use std::sync::Arc;
-use std::time::Duration;
-
 use async_trait::async_trait;
-use metrics::{counter, gauge, histogram};
-use tracing::{debug, error};
+use metrics::{counter, histogram};
+use tracing::debug;
 
 use crate::events::{EventHandler, FmcdEvent};
 use crate::metrics::{
@@ -127,10 +124,10 @@ impl EventHandler for MetricsEventHandler {
             }
             FmcdEvent::PaymentSucceeded {
                 federation_id,
-                fee_msat,
+                amount_msat,
                 ..
             } => {
-                self.record_payment_metrics(&federation_id, "succeeded", None, Some(fee_msat));
+                self.record_payment_metrics(&federation_id, "succeeded", Some(amount_msat), None);
             }
             FmcdEvent::PaymentFailed { federation_id, .. } => {
                 self.record_payment_metrics(&federation_id, "failed", None, None);
@@ -144,10 +141,10 @@ impl EventHandler for MetricsEventHandler {
             }
             FmcdEvent::InvoicePaid {
                 federation_id,
-                amount_received_msat,
+                amount_msat,
                 ..
             } => {
-                self.record_invoice_metrics(&federation_id, "paid", Some(amount_received_msat));
+                self.record_invoice_metrics(&federation_id, "paid", Some(amount_msat));
             }
             FmcdEvent::InvoiceExpired { federation_id, .. } => {
                 self.record_invoice_metrics(&federation_id, "expired", None);
@@ -209,7 +206,7 @@ impl EventHandler for MetricsEventHandler {
                 histogram!(PAYMENT_AMOUNT_MSAT, "federation_id" => federation_id)
                     .record((amount_sat * 1000) as f64);
             }
-            FmcdEvent::WithdrawalCompleted { federation_id, .. } => {
+            FmcdEvent::WithdrawalSucceeded { federation_id, .. } => {
                 counter!(PAYMENTS_TOTAL, "federation_id" => federation_id, "type" => "withdrawal", "status" => "completed").increment(1);
             }
             FmcdEvent::WithdrawalFailed { federation_id, .. } => {
@@ -225,6 +222,19 @@ impl EventHandler for MetricsEventHandler {
                 ..
             } => {
                 counter!(PAYMENTS_TOTAL, "federation_id" => federation_id.clone(), "type" => "deposit", "status" => "detected").increment(1);
+                histogram!(PAYMENT_AMOUNT_MSAT, "federation_id" => federation_id)
+                    .record((amount_sat * 1000) as f64);
+            }
+            FmcdEvent::PaymentRefunded { federation_id, .. } => {
+                counter!(PAYMENTS_TOTAL, "federation_id" => federation_id, "status" => "refunded")
+                    .increment(1);
+            }
+            FmcdEvent::DepositClaimed {
+                federation_id,
+                amount_sat,
+                ..
+            } => {
+                counter!(PAYMENTS_TOTAL, "federation_id" => federation_id.clone(), "type" => "deposit", "status" => "claimed").increment(1);
                 histogram!(PAYMENT_AMOUNT_MSAT, "federation_id" => federation_id)
                     .record((amount_sat * 1000) as f64);
             }

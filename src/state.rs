@@ -2,8 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
-use anyhow::{anyhow, Result};
-use axum::http::StatusCode;
+use anyhow::Result;
 use fedimint_client::ClientHandleArc;
 use fedimint_core::config::{FederationId, FederationIdPrefix};
 use tracing::{info, warn};
@@ -12,8 +11,10 @@ use crate::error::{AppError, ErrorCategory};
 use crate::events::handlers::{LoggingEventHandler, MetricsEventHandler};
 use crate::events::EventBus;
 use crate::multimint::MultiMint;
-use crate::observability::correlation::RequestContext;
-use crate::services::{BalanceMonitor, BalanceMonitorConfig, DepositMonitor, DepositMonitorConfig};
+use crate::services::{
+    BalanceMonitor, BalanceMonitorConfig, DepositMonitor, DepositMonitorConfig,
+    PaymentLifecycleConfig, PaymentLifecycleManager,
+};
 use crate::webhooks::{WebhookConfig, WebhookNotifier};
 
 #[cfg(test)]
@@ -26,6 +27,7 @@ pub struct AppState {
     pub event_bus: Arc<EventBus>,
     pub deposit_monitor: Option<Arc<DepositMonitor>>,
     pub balance_monitor: Option<Arc<BalanceMonitor>>,
+    pub payment_lifecycle_manager: Option<Arc<PaymentLifecycleManager>>,
 }
 
 impl AppState {
@@ -79,12 +81,19 @@ impl AppState {
             BalanceMonitorConfig::default(),
         ));
 
+        let payment_lifecycle_manager = Arc::new(PaymentLifecycleManager::new(
+            event_bus.clone(),
+            Arc::new(clients.clone()),
+            PaymentLifecycleConfig::default(),
+        ));
+
         Ok(Self {
             multimint: clients,
             start_time: Instant::now(),
             event_bus,
             deposit_monitor: Some(deposit_monitor),
             balance_monitor: Some(balance_monitor),
+            payment_lifecycle_manager: Some(payment_lifecycle_manager),
         })
     }
 
@@ -142,12 +151,19 @@ impl AppState {
             BalanceMonitorConfig::default(),
         ));
 
+        let payment_lifecycle_manager = Arc::new(PaymentLifecycleManager::new(
+            event_bus.clone(),
+            Arc::new(clients.clone()),
+            PaymentLifecycleConfig::default(),
+        ));
+
         Ok(Self {
             multimint: clients,
             start_time: Instant::now(),
             event_bus,
             deposit_monitor: Some(deposit_monitor),
             balance_monitor: Some(balance_monitor),
+            payment_lifecycle_manager: Some(payment_lifecycle_manager),
         })
     }
 
@@ -221,7 +237,8 @@ impl AppState {
         self.start_time.elapsed()
     }
 
-    /// Start the monitoring services (deposit and balance monitors)
+    /// Start the monitoring services (deposit, balance, and payment lifecycle
+    /// monitors)
     pub async fn start_monitoring_services(&self) -> Result<()> {
         if let Some(ref deposit_monitor) = self.deposit_monitor {
             deposit_monitor.start().await?;
@@ -231,6 +248,11 @@ impl AppState {
         if let Some(ref balance_monitor) = self.balance_monitor {
             balance_monitor.start().await?;
             info!("Balance monitor started successfully");
+        }
+
+        if let Some(ref payment_lifecycle_manager) = self.payment_lifecycle_manager {
+            payment_lifecycle_manager.start().await?;
+            info!("Payment lifecycle manager started successfully");
         }
 
         Ok(())
