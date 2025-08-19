@@ -73,11 +73,8 @@ curl http://localhost:7070/v2/admin/info \
 ### Lightning network related commands:
 
 - `/v2/ln/invoice`: Create a lightning invoice to receive payment via gateway.
-- `/v2/ln/await-invoice`: Wait for incoming invoice to be paid.
 - `/v2/ln/pay`: Pay a lightning invoice or lnurl via a gateway.
-- `/v2/ln/await-pay`: Wait for a lightning payment to complete.
 - `/v2/ln/gateways`: List registered gateways.
-- `/v2/ln/switch-gateway`: Switch active gateway.
 
 ### Onchain related commands:
 
