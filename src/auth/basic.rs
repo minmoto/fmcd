@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::{Extension, Request};
+use axum::extract::Request;
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::Response;
@@ -58,7 +58,7 @@ impl BasicAuth {
 pub async fn basic_auth_middleware_with_events(
     auth: Arc<BasicAuth>,
     event_bus: Arc<EventBus>,
-    mut request: Request,
+    request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
     let method = request.method().to_string();

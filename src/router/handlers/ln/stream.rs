@@ -11,8 +11,8 @@ use fedimint_client::ClientHandleArc;
 use fedimint_core::config::FederationId;
 use fedimint_core::core::OperationId;
 use fedimint_ln_client::{LightningClientModule, LnReceiveState};
-use futures_util::stream::{Stream, StreamExt};
-use serde::{Deserialize, Serialize};
+use futures_util::stream::Stream;
+use serde::Deserialize;
 use tokio_stream::wrappers::IntervalStream;
 use tracing::{error, info, warn};
 
@@ -50,6 +50,19 @@ async fn create_unified_invoice_stream(
         }
     };
 
+    // Try to get the invoice amount from operation metadata
+    let invoice_amount_msat = client
+        .operation_log()
+        .get_operation(operation_id)
+        .await
+        .and_then(|op| {
+            // Extract amount from operation metadata if available
+            op.meta::<serde_json::Value>()
+                .get("amount")
+                .and_then(|v| v.as_u64())
+        })
+        .unwrap_or(0); // Default to 0 if not found
+
     // Use fedimint's native subscribe_ln_receive for real-time monitoring
     let updates_stream = match lightning_module.subscribe_ln_receive(operation_id).await {
         Ok(stream) => stream.into_stream(),
@@ -78,7 +91,8 @@ async fn create_unified_invoice_stream(
     // Convert fedimint LnReceiveState updates to unified SSE events
     let invoice_updates_stream = updates_stream.map(move |ln_state| {
         let updated_at = Utc::now();
-        let (status, settlement_info) = fedimint_state_to_unified_status(ln_state, updated_at);
+        let (status, settlement_info) =
+            fedimint_state_to_unified_status(ln_state, updated_at, invoice_amount_msat);
 
         let update = InvoiceStatusUpdate {
             invoice_id: format!("inv_{:?}", operation_id), // Generate consistent invoice_id
@@ -141,24 +155,28 @@ async fn create_unified_invoice_stream(
 fn fedimint_state_to_unified_status(
     ln_state: LnReceiveState,
     updated_at: chrono::DateTime<Utc>,
+    invoice_amount_msat: u64,
 ) -> (InvoiceStatus, Option<SettlementInfo>) {
     match ln_state {
         LnReceiveState::Created => (InvoiceStatus::Created, None),
         LnReceiveState::WaitingForPayment { .. } => (InvoiceStatus::Pending, None),
         LnReceiveState::Claimed => {
             // NOTE: Fedimint's LnReceiveState::Claimed doesn't include settlement details
-            // This would require API enhancements to expose:
-            // - Actual amount received (may differ from invoice amount due to fees)
-            // - Payment preimage
-            // - Gateway fees
-            // - Exact settlement timestamp
-            // For now using placeholders, consider querying operation metadata as
-            // workaround
+            // The actual amount received might differ from invoice amount due to fees.
+            // Using the invoice amount from operation metadata as a reasonable
+            // approximation. This ensures real-time monitoring receives
+            // meaningful data rather than 0.
             let settlement_info = SettlementInfo {
-                amount_received_msat: 0, // Pending fedimint API enhancement
-                settled_at: updated_at,  // Using update time as approximation
-                preimage: None,          // Not exposed in current API
-                gateway_fee_msat: None,  // Not exposed in current API
+                amount_received_msat: if invoice_amount_msat > 0 {
+                    invoice_amount_msat
+                } else {
+                    // Log warning if amount is not available
+                    warn!("Invoice amount not found in operation metadata for stream, using 0");
+                    0
+                },
+                settled_at: updated_at, // Using update time as approximation
+                preimage: None,         // Not exposed in current API
+                gateway_fee_msat: None, // Not exposed in current API
             };
             (
                 InvoiceStatus::Claimed {
@@ -327,9 +345,9 @@ trait EventIdFilter {
 impl EventIdFilter for crate::events::FmcdEvent {
     fn contains_id(&self, id: &str) -> bool {
         match self {
-            // Use exact equality comparison instead of contains() to match full IDs
+            // Match invoice_id where available, operation_id for InvoicePaid
             crate::events::FmcdEvent::InvoiceCreated { invoice_id, .. } => invoice_id == id,
-            crate::events::FmcdEvent::InvoicePaid { invoice_id, .. } => invoice_id == id,
+            crate::events::FmcdEvent::InvoicePaid { operation_id, .. } => operation_id == id,
             crate::events::FmcdEvent::InvoiceExpired { invoice_id, .. } => invoice_id == id,
             _ => false,
         }

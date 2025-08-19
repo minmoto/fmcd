@@ -1,6 +1,4 @@
-use anyhow::anyhow;
 use axum::extract::{Extension, State};
-use axum::http::StatusCode;
 use axum::Json;
 use fedimint_client::ClientHandleArc;
 use fedimint_core::config::FederationId;
@@ -10,7 +8,7 @@ use fedimint_core::Amount;
 use fedimint_ln_client::{LightningClientModule, OutgoingLightningPayment, PayType};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tracing::{error, info, info_span, instrument, Instrument};
+use tracing::{error, info, instrument};
 
 use crate::error::{AppError, ErrorCategory};
 use crate::observability::correlation::RequestContext;
@@ -240,6 +238,30 @@ async fn _pay(
         "Payment initiated successfully"
     );
 
+    // Register with payment lifecycle manager for comprehensive tracking
+    if let Some(ref payment_lifecycle_manager) = state.payment_lifecycle_manager {
+        if let Err(e) = payment_lifecycle_manager
+            .track_lightning_pay(
+                operation_id,
+                req.federation_id,
+                req.amount_msat.unwrap_or(Amount::ZERO),
+                None,
+            )
+            .await
+        {
+            error!(
+                operation_id = ?operation_id,
+                error = ?e,
+                "Failed to register payment with lifecycle manager"
+            );
+        } else {
+            info!(
+                operation_id = ?operation_id,
+                "Payment registered with lifecycle manager for monitoring"
+            );
+        }
+    }
+
     // Wait for payment completion
     let result = wait_for_ln_payment(&client, payment_type, contract_id.to_string(), false)
         .await?
@@ -277,9 +299,10 @@ async fn _pay(
             AppError::gateway_error("Payment failed or timed out").with_context(context.clone())
         })?;
 
-    // Track payment success
+    // Track payment success - use actual payment amount
+    let payment_amount = req.amount_msat.unwrap_or(fee).msats;
     payment_tracker
-        .succeed(result.preimage.clone(), fee.msats)
+        .succeed(result.preimage.clone(), payment_amount, fee.msats)
         .await;
 
     span.record("payment_status", "completed");
