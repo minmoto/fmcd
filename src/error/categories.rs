@@ -2,7 +2,6 @@ use std::fmt;
 
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
-use tracing::{error, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

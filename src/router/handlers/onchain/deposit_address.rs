@@ -6,7 +6,6 @@ use chrono::Utc;
 use fedimint_client::ClientHandleArc;
 use fedimint_core::config::FederationId;
 use fedimint_core::core::OperationId;
-use fedimint_ln_common::bitcoin::Address;
 use fedimint_wallet_client::client_db::TweakIdx;
 use fedimint_wallet_client::WalletClientModule;
 use serde::{Deserialize, Serialize};
@@ -101,6 +100,31 @@ async fn _deposit_address(
                 operation_id = ?operation_id,
                 federation_id = %req.federation_id,
                 "Deposit registered with monitor"
+            );
+        }
+    }
+
+    // Register with payment lifecycle manager for automatic ecash claiming
+    if let Some(ref payment_lifecycle_manager) = state.payment_lifecycle_manager {
+        if let Err(e) = payment_lifecycle_manager
+            .track_onchain_deposit(
+                operation_id,
+                req.federation_id,
+                context.as_ref().map(|c| c.correlation_id.clone()),
+            )
+            .await
+        {
+            tracing::warn!(
+                operation_id = ?operation_id,
+                federation_id = %req.federation_id,
+                error = ?e,
+                "Failed to register deposit with payment lifecycle manager"
+            );
+        } else {
+            tracing::info!(
+                operation_id = ?operation_id,
+                federation_id = %req.federation_id,
+                "Deposit registered with payment lifecycle manager for automatic ecash claiming"
             );
         }
     }

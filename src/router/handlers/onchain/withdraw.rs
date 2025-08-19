@@ -4,7 +4,6 @@ use anyhow::anyhow;
 use axum::extract::{Extension, State};
 use axum::http::StatusCode;
 use axum::Json;
-use bitcoin::address::NetworkUnchecked;
 use bitcoin::{Address, Amount, Txid};
 use chrono::Utc;
 use fedimint_client::ClientHandleArc;
@@ -107,6 +106,25 @@ async fn _withdraw(
         "Withdrawal initiated"
     );
 
+    // Register with payment lifecycle manager for comprehensive monitoring
+    if let Some(ref payment_lifecycle_manager) = state.payment_lifecycle_manager {
+        if let Err(e) = payment_lifecycle_manager
+            .track_onchain_withdraw(operation_id, req.federation_id, amount.to_sat())
+            .await
+        {
+            error!(
+                operation_id = ?operation_id,
+                error = ?e,
+                "Failed to register withdrawal with payment lifecycle manager"
+            );
+        } else {
+            info!(
+                operation_id = ?operation_id,
+                "Withdrawal registered with payment lifecycle manager for monitoring"
+            );
+        }
+    }
+
     let mut updates = wallet_module
         .subscribe_withdraw_updates(operation_id)
         .await?
@@ -117,15 +135,15 @@ async fn _withdraw(
 
         match update {
             WithdrawState::Succeeded(txid) => {
-                // Emit withdrawal completed event
-                let withdrawal_completed_event = FmcdEvent::WithdrawalCompleted {
+                // Emit withdrawal succeeded event
+                let withdrawal_succeeded_event = FmcdEvent::WithdrawalSucceeded {
                     operation_id: format!("{:?}", operation_id),
                     federation_id: req.federation_id.to_string(),
+                    amount_sat: amount.to_sat(),
                     txid: txid.to_string(),
-                    correlation_id: Some(context.correlation_id.clone()),
                     timestamp: Utc::now(),
                 };
-                if let Err(e) = state.event_bus.publish(withdrawal_completed_event).await {
+                if let Err(e) = state.event_bus.publish(withdrawal_succeeded_event).await {
                     error!(
                         operation_id = ?operation_id,
                         correlation_id = %context.correlation_id,

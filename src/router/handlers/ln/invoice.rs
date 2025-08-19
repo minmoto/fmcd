@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::anyhow;
@@ -20,7 +19,6 @@ use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
 use crate::error::AppError;
-use crate::events::{EventBus, FmcdEvent};
 use crate::observability::correlation::RequestContext;
 use crate::operations::payment::InvoiceTracker;
 use crate::state::AppState;
@@ -208,7 +206,7 @@ async fn _create_invoice(
         invoice_id.clone(),
         req.federation_id,
         state.event_bus.clone(),
-        Some(context),
+        Some(context.clone()),
     );
 
     // Record telemetry
@@ -231,20 +229,49 @@ async fn _create_invoice(
         metadata: req.metadata.clone(),
     };
 
-    // Start automatic monitoring for all invoices
+    // Register with payment lifecycle manager for comprehensive tracking and ecash
+    // claiming
+    if let Some(ref payment_lifecycle_manager) = state.payment_lifecycle_manager {
+        if let Err(e) = payment_lifecycle_manager
+            .track_lightning_receive(
+                operation_id,
+                req.federation_id,
+                req.amount_msat,
+                req.metadata.clone(),
+                Some(context.correlation_id.clone()),
+            )
+            .await
+        {
+            error!(
+                operation_id = ?operation_id,
+                invoice_id = %invoice_id,
+                error = ?e,
+                "Failed to register invoice with payment lifecycle manager"
+            );
+        } else {
+            info!(
+                operation_id = ?operation_id,
+                invoice_id = %invoice_id,
+                "Invoice registered with payment lifecycle manager for automatic ecash claiming"
+            );
+        }
+    }
+
+    // Start automatic monitoring for all invoices (legacy compatibility - will be
+    // removed)
     let client_clone = client.clone();
-    let event_bus = state.event_bus.clone();
     let timeout = Duration::from_secs(24 * 60 * 60); // 24 hours max timeout
     let invoice_tracker_clone = invoice_tracker;
     let invoice_id_clone = invoice_id.clone();
+    let amount_msat = req.amount_msat.msats;
 
     tokio::spawn(async move {
         if let Err(e) = monitor_invoice_settlement_automatic(
             client_clone,
             operation_id,
             invoice_id_clone.clone(),
+            amount_msat,
             timeout,
-            event_bus,
             invoice_tracker_clone,
         )
         .await
@@ -275,8 +302,8 @@ async fn monitor_invoice_settlement_automatic(
     client: ClientHandleArc,
     operation_id: OperationId,
     invoice_id: String,
+    amount_msat: u64,
     timeout: Duration,
-    event_bus: Arc<EventBus>,
     invoice_tracker: InvoiceTracker,
 ) -> anyhow::Result<()> {
     let lightning_module = client.get_first_module::<LightningClientModule>()?;
@@ -309,10 +336,10 @@ async fn monitor_invoice_settlement_automatic(
                         );
 
                         if let Err(e) = handle_settlement_success(
-                            &event_bus,
                             &invoice_tracker,
                             operation_id,
                             &invoice_id,
+                            amount_msat,
                         ).await {
                             error!(
                                 operation_id = ?operation_id,
@@ -332,7 +359,6 @@ async fn monitor_invoice_settlement_automatic(
                         );
 
                         if let Err(e) = handle_settlement_cancellation(
-                            &event_bus,
                             &invoice_tracker,
                             operation_id,
                             &invoice_id,
@@ -375,8 +401,6 @@ async fn monitor_invoice_settlement_automatic(
                 );
 
                 if let Err(e) = handle_settlement_timeout(
-                    &event_bus,
-                    &invoice_tracker,
                     operation_id,
                     &invoice_id,
                 ).await {
@@ -402,20 +426,17 @@ async fn monitor_invoice_settlement_automatic(
 }
 
 async fn handle_settlement_success(
-    event_bus: &Arc<EventBus>,
     invoice_tracker: &InvoiceTracker,
     operation_id: OperationId,
     invoice_id: &str,
+    amount_msat: u64,
 ) -> anyhow::Result<()> {
     // NOTE: Fedimint's current API doesn't expose the actual settlement amount
-    // from the LnReceiveState::Claimed state. This would require:
-    // 1. Enhancement to fedimint-ln-client to include amount in Claimed state
-    // 2. Or access to the operation's metadata/outcome which may contain the amount
-    // For now, we use 0 as a placeholder. In production, consider:
-    // - Using the original invoice amount as an approximation
-    // - Querying the operation log for metadata
-    // - Working with the Fedimint team to expose this data
-    let amount_received_msat = 0; // Placeholder - actual amount extraction pending Fedimint API enhancement
+    // from the LnReceiveState::Claimed state. The actual amount received might
+    // differ from the invoice amount due to routing fees or other factors.
+    // For now, we use the original invoice amount as a reasonable approximation.
+    // This ensures webhooks and events receive meaningful data rather than 0.
+    let amount_received_msat = amount_msat;
 
     // Publish invoice paid event to event bus
     invoice_tracker.paid(amount_received_msat).await;
@@ -431,7 +452,6 @@ async fn handle_settlement_success(
 }
 
 async fn handle_settlement_cancellation(
-    event_bus: &Arc<EventBus>,
     invoice_tracker: &InvoiceTracker,
     operation_id: OperationId,
     invoice_id: &str,
@@ -451,8 +471,6 @@ async fn handle_settlement_cancellation(
 }
 
 async fn handle_settlement_timeout(
-    event_bus: &Arc<EventBus>,
-    invoice_tracker: &InvoiceTracker,
     operation_id: OperationId,
     invoice_id: &str,
 ) -> anyhow::Result<()> {
