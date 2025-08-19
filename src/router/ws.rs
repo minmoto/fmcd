@@ -76,8 +76,6 @@ pub enum JsonRpcMethod {
     LnInvoice,
     LnStatus,
     LnStatusBulk,
-    LnInvoiceExternalPubkeyTweaked,
-    LnClaimExternalReceiveTweaked,
     LnPay,
     LnListGateways,
     WalletDepositAddress,
@@ -286,13 +284,6 @@ async fn match_method(
             )
             .await?;
             Ok(serde_json::to_value(response.0)?)
-        }
-        JsonRpcMethod::LnInvoiceExternalPubkeyTweaked => {
-            handlers::ln::invoice_external_pubkey_tweaked::handle_ws(state.clone(), req.params)
-                .await
-        }
-        JsonRpcMethod::LnClaimExternalReceiveTweaked => {
-            handlers::ln::claim_external_receive_tweaked::handle_ws(state.clone(), req.params).await
         }
         JsonRpcMethod::LnPay => handlers::ln::pay::handle_ws(state.clone(), req.params).await,
         JsonRpcMethod::LnListGateways => {
