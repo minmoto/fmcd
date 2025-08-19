@@ -305,14 +305,8 @@ async fn track_metrics(req: Request, next: Next) -> impl IntoResponse {
 /// Lightning network related commands:
 /// - `/v2/ln/invoice`: Create a lightning invoice to receive payment via
 ///   gateway.
-/// - `/v2/ln/invoice-external-pubkey-tweaked`: Create a lightning invoice to
-///   receive payment via gateway with external pubkey.
-/// - `/v2/ln/await-invoice`: Wait for incoming invoice to be paid.
-/// - `/v2/ln/claim-external-receive-tweaked`: Claim an external receive.
 /// - `/v2/ln/pay`: Pay a lightning invoice or lnurl via a gateway.
-/// - `/v2/ln/await-pay`: Wait for a lightning payment to complete.
 /// - `/v2/ln/gateways`: List registered gateways.
-/// - `/v2/ln/switch-gateway`: Switch active gateway.
 ///
 /// Onchain related commands:
 /// - `/v2/onchain/deposit-address`: Generate a new deposit address, funds sent
@@ -347,14 +341,6 @@ fn fedimint_v2_rest() -> Router<AppState> {
             get(ln::stream::handle_global_event_stream),
         )
         // Other LN endpoints
-        .route(
-            "/invoice-external-pubkey-tweaked",
-            post(ln::invoice_external_pubkey_tweaked::handle_rest),
-        )
-        .route(
-            "/claim-external-receive-tweaked",
-            post(ln::claim_external_receive_tweaked::handle_rest),
-        )
         .route("/pay", post(ln::pay::handle_rest))
         .route("/gateways", post(ln::gateways::handle_rest));
 

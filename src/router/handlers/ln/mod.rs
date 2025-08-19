@@ -11,10 +11,8 @@ use tracing::{debug, info};
 use self::pay::{LnPayRequest, LnPayResponse};
 use crate::observability::sanitize_invoice;
 
-pub mod claim_external_receive_tweaked;
 pub mod gateways;
 pub mod invoice;
-pub mod invoice_external_pubkey_tweaked;
 pub mod pay;
 pub mod status;
 pub mod stream;
