@@ -5,8 +5,8 @@ use fedimint_core::config::FederationId;
 use serde::Serialize;
 use serde_json::{json, Value};
 
+use crate::core::multimint::MultiMint;
 use crate::error::AppError;
-use crate::multimint::MultiMint;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize)]
@@ -21,7 +21,7 @@ async fn _federation_ids(multimint: MultiMint) -> Result<FederationIdsResponse, 
 }
 
 pub async fn handle_ws(state: AppState, _v: Value) -> Result<Value, AppError> {
-    let federation_ids = _federation_ids(state.multimint).await?;
+    let federation_ids = _federation_ids(state.multimint().clone()).await?;
     let federation_ids_json = json!(federation_ids);
     Ok(federation_ids_json)
 }
@@ -30,6 +30,6 @@ pub async fn handle_ws(state: AppState, _v: Value) -> Result<Value, AppError> {
 pub async fn handle_rest(
     State(state): State<AppState>,
 ) -> Result<Json<FederationIdsResponse>, AppError> {
-    let federation_ids = _federation_ids(state.multimint).await?;
+    let federation_ids = _federation_ids(state.multimint().clone()).await?;
     Ok(Json(federation_ids))
 }

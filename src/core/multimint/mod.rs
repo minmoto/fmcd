@@ -27,7 +27,7 @@
 //! Example:
 //!
 //! ```rust
-//! use crate::multimint::MultiMint;
+//! use crate::core::multimint::MultiMint;
 //! use std::path::PathBuf;
 //!
 //! #[tokio::main]
@@ -106,7 +106,7 @@ impl MultiMint {
     /// # Example
     ///
     /// ```rust
-    /// use crate::multimint::MultiMint;
+    /// use crate::core::multimint::MultiMint;
     /// use std::path::PathBuf;
     ///
     /// #[tokio::main]

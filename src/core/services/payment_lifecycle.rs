@@ -16,8 +16,8 @@ use tokio::sync::{broadcast, Mutex, RwLock};
 use tokio::time::interval;
 use tracing::{debug, error, info, instrument, warn};
 
+use crate::core::multimint::MultiMint;
 use crate::events::{EventBus, FmcdEvent};
-use crate::multimint::MultiMint;
 
 /// Type of payment operation
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

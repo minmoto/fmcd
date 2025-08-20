@@ -89,7 +89,7 @@ async fn _withdraw(
         correlation_id: Some(context.correlation_id.clone()),
         timestamp: Utc::now(),
     };
-    if let Err(e) = state.event_bus.publish(withdrawal_initiated_event).await {
+    if let Err(e) = state.event_bus().publish(withdrawal_initiated_event).await {
         error!(
             operation_id = ?operation_id,
             correlation_id = %context.correlation_id,
@@ -107,7 +107,7 @@ async fn _withdraw(
     );
 
     // Register with payment lifecycle manager for comprehensive monitoring
-    if let Some(ref payment_lifecycle_manager) = state.payment_lifecycle_manager {
+    if let Some(ref payment_lifecycle_manager) = state.payment_lifecycle_manager() {
         if let Err(e) = payment_lifecycle_manager
             .track_onchain_withdraw(operation_id, req.federation_id, amount.to_sat())
             .await
@@ -143,7 +143,7 @@ async fn _withdraw(
                     txid: txid.to_string(),
                     timestamp: Utc::now(),
                 };
-                if let Err(e) = state.event_bus.publish(withdrawal_succeeded_event).await {
+                if let Err(e) = state.event_bus().publish(withdrawal_succeeded_event).await {
                     error!(
                         operation_id = ?operation_id,
                         correlation_id = %context.correlation_id,
@@ -175,7 +175,7 @@ async fn _withdraw(
                     correlation_id: Some(context.correlation_id.clone()),
                     timestamp: Utc::now(),
                 };
-                if let Err(event_err) = state.event_bus.publish(withdrawal_failed_event).await {
+                if let Err(event_err) = state.event_bus().publish(withdrawal_failed_event).await {
                     error!(
                         operation_id = ?operation_id,
                         correlation_id = %context.correlation_id,
@@ -208,7 +208,7 @@ async fn _withdraw(
         correlation_id: Some(context.correlation_id.clone()),
         timestamp: Utc::now(),
     };
-    if let Err(e) = state.event_bus.publish(withdrawal_failed_event).await {
+    if let Err(e) = state.event_bus().publish(withdrawal_failed_event).await {
         error!(
             operation_id = ?operation_id,
             correlation_id = %context.correlation_id,

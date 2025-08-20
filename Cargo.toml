@@ -15,35 +15,32 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "fmcd"
-path = "src/main.rs"
+path = "src/bin/main.rs"
 
 [dependencies]
+# Core dependencies (used by both library and binary)
 anyhow = "1.0.75"
-axum = { version = "0.7.1", features = ["json", "ws"] }
-axum-macros = "0.4.0"
-dotenv = "0.15.0"
 serde = "1.0.193"
 serde_json = "1.0.108"
 tokio = { version = "1.34.0", features = ["full"] }
 tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "fmt"] }
-tracing-appender = "0.2"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 url = "2.5.0"
-lazy_static = "1.4.0"
-async-utility = "0.2.0"
-tower-http = { version = "0.5.2", features = ["cors", "auth", "trace"] }
-itertools = "0.12.0"
-lnurl-rs = { version = "0.9.0", features = ["async"], default-features = false }
-reqwest = { version = "0.12.3", features = [
-  "json",
-  "rustls-tls",
-], default-features = false }
 bitcoin = "0.32.7"
 time = { version = "0.3.25", features = ["formatting"] }
 chrono = { version = "0.4.31", features = ["serde"] }
-futures-util = "0.3.30"
-clap = { version = "3", features = ["derive", "env"] }
+futures = "0.3"
+async-stream = "0.3"
+tokio-stream = "0.1"
+rand = "0.8.5"
+bip39 = "2.1.0"
+hex = "0.4.3"
+base64 = "0.21"
+hmac = "0.12"
+sha2 = "0.10"
+async-trait = "0.1"
+
+# Fedimint dependencies (core)
 fedimint-api-client = "0.8.0"
 fedimint-client = "0.8.0"
 fedimint-core = "0.8.0"
@@ -54,21 +51,50 @@ fedimint-ln-common = "0.8.0"
 fedimint-rocksdb = "0.8.0"
 fedimint-bip39 = "0.8.0"
 fedimint-derive-secret = "0.8.0"
-rand = "0.8.5"
-bip39 = "2.1.0"
-hex = "0.4.3"
-base64 = "0.21"
-hmac = "0.12"
-sha2 = "0.10"
-toml = "0.8"
 
-futures = "0.3"
-async-stream = "0.3"
-tokio-stream = "0.1"
-metrics = { version = "0.23", default-features = false }
-metrics-exporter-prometheus = { version = "0.15.3", default-features = false }
-console = "0.15"
-async-trait = "0.1"
+# API dependencies (only used by binary)
+axum = { version = "0.7.1", features = ["json", "ws"], optional = true }
+axum-macros = { version = "0.4.0", optional = true }
+dotenv = { version = "0.15.0", optional = true }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "fmt"], optional = true }
+tracing-appender = { version = "0.2", optional = true }
+lazy_static = { version = "1.4.0", optional = true }
+async-utility = { version = "0.2.0", optional = true }
+tower-http = { version = "0.5.2", features = ["cors", "auth", "trace"], optional = true }
+itertools = { version = "0.12.0", optional = true }
+lnurl-rs = { version = "0.9.0", features = ["async"], default-features = false, optional = true }
+reqwest = { version = "0.12.3", features = [
+  "json",
+  "rustls-tls",
+], default-features = false, optional = true }
+futures-util = { version = "0.3.30", optional = true }
+clap = { version = "3", features = ["derive", "env"], optional = true }
+toml = { version = "0.8", optional = true }
+metrics = { version = "0.23", default-features = false, optional = true }
+metrics-exporter-prometheus = { version = "0.15.3", default-features = false, optional = true }
+console = { version = "0.15", optional = true }
+
+[features]
+default = ["api"]
+api = [
+  "axum",
+  "axum-macros",
+  "dotenv",
+  "tracing-subscriber",
+  "tracing-appender",
+  "lazy_static",
+  "async-utility",
+  "tower-http",
+  "itertools",
+  "lnurl-rs",
+  "reqwest",
+  "futures-util",
+  "clap",
+  "toml",
+  "metrics",
+  "metrics-exporter-prometheus",
+  "console"
+]
 
 [dev-dependencies]
 tempfile = "3.8"

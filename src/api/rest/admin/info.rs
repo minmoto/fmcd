@@ -10,8 +10,8 @@ use fedimint_wallet_client::WalletClientModule;
 use serde::Serialize;
 use serde_json::{json, Value};
 
+use crate::core::multimint::MultiMint;
 use crate::error::AppError;
-use crate::multimint::MultiMint;
 use crate::state::AppState;
 
 #[derive(Debug, Serialize)]
@@ -49,7 +49,7 @@ async fn _info(multimint: MultiMint) -> Result<HashMap<FederationId, InfoRespons
 }
 
 pub async fn handle_ws(state: AppState, _v: Value) -> Result<Value, AppError> {
-    let info = _info(state.multimint).await?;
+    let info = _info(state.multimint().clone()).await?;
     let info_json = json!(info);
     Ok(info_json)
 }
@@ -58,6 +58,6 @@ pub async fn handle_ws(state: AppState, _v: Value) -> Result<Value, AppError> {
 pub async fn handle_rest(
     State(state): State<AppState>,
 ) -> Result<Json<HashMap<FederationId, InfoResponse>>, AppError> {
-    let info = _info(state.multimint).await?;
+    let info = _info(state.multimint().clone()).await?;
     Ok(Json(info))
 }

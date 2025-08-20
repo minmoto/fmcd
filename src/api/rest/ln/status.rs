@@ -12,8 +12,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::{error, info, instrument, warn};
 
+use crate::api::rest::ln::invoice::{InvoiceStatus, SettlementInfo};
 use crate::error::AppError;
-use crate::router::handlers::ln::invoice::{InvoiceStatus, SettlementInfo};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
