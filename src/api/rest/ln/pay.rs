@@ -10,11 +10,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::{error, info, instrument};
 
+use super::{get_invoice, wait_for_ln_payment};
+use crate::core::operations::PaymentTracker;
 use crate::error::{AppError, ErrorCategory};
 use crate::observability::correlation::RequestContext;
 use crate::observability::{sanitize_invoice, sanitize_preimage};
-use crate::operations::PaymentTracker;
-use crate::router::handlers::ln::{get_invoice, wait_for_ln_payment};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -68,7 +68,7 @@ async fn _pay(
         req.federation_id,
         &bolt11.to_string(),
         req.amount_msat.map(|a| a.msats).unwrap_or(0),
-        state.event_bus.clone(),
+        state.event_bus().clone(),
         Some(context.clone()),
     );
 
@@ -101,7 +101,7 @@ async fn _pay(
             );
 
             // Track failure using spawn to avoid blocking error return
-            let event_bus = state.event_bus.clone();
+            let event_bus = state.event_bus().clone();
             let payment_id = payment_tracker.payment_id().to_string();
             let federation_id = payment_tracker.federation_id().to_string();
             let correlation_id = payment_tracker.correlation_id().cloned();
@@ -145,7 +145,7 @@ async fn _pay(
             );
 
             // Track failure using spawn to avoid blocking error return
-            let event_bus = state.event_bus.clone();
+            let event_bus = state.event_bus().clone();
             let payment_id = payment_tracker.payment_id().to_string();
             let federation_id = payment_tracker.federation_id().to_string();
             let correlation_id = payment_tracker.correlation_id().cloned();
@@ -202,7 +202,7 @@ async fn _pay(
             );
 
             // Track failure using spawn to avoid blocking error return
-            let event_bus = state.event_bus.clone();
+            let event_bus = state.event_bus().clone();
             let payment_id = payment_tracker.payment_id().to_string();
             let federation_id = payment_tracker.federation_id().to_string();
             let correlation_id = payment_tracker.correlation_id().cloned();
@@ -239,7 +239,7 @@ async fn _pay(
     );
 
     // Register with payment lifecycle manager for comprehensive tracking
-    if let Some(ref payment_lifecycle_manager) = state.payment_lifecycle_manager {
+    if let Some(ref payment_lifecycle_manager) = state.payment_lifecycle_manager() {
         if let Err(e) = payment_lifecycle_manager
             .track_lightning_pay(
                 operation_id,
@@ -275,7 +275,7 @@ async fn _pay(
             span.record("payment_status", "failed");
 
             // Track failure using spawn to avoid blocking error return
-            let event_bus = state.event_bus.clone();
+            let event_bus = state.event_bus().clone();
             let payment_id = payment_tracker.payment_id().to_string();
             let federation_id = payment_tracker.federation_id().to_string();
             let correlation_id = payment_tracker.correlation_id().cloned();

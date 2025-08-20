@@ -132,7 +132,7 @@ pub async fn health_check(
     );
 
     // Check all federation clients
-    let federations = state.multimint.all().await;
+    let federations = state.multimint().all().await;
     for client in federations {
         let fed_check_start = Instant::now();
         let federation_id = client.config().await.global.calculate_federation_id();
@@ -169,7 +169,7 @@ pub async fn health_check(
     let health_status = HealthStatus {
         status: overall_status,
         version: env!("CARGO_PKG_VERSION").to_string(),
-        uptime_seconds: state.start_time.elapsed().as_secs(),
+        uptime_seconds: state.start_time().elapsed().as_secs(),
         timestamp,
         checks,
         summary,
@@ -242,7 +242,7 @@ pub async fn readiness_check(
     }
 
     // Check if at least one federation is available
-    let federations = state.multimint.all().await;
+    let federations = state.multimint().all().await;
     if federations.is_empty() {
         warn!("Readiness check failed - no federations available");
         return Err(StatusCode::SERVICE_UNAVAILABLE);
@@ -305,13 +305,13 @@ async fn check_database_health(state: &AppState) -> ComponentHealth {
 /// Check basic database connectivity
 async fn check_database_connectivity(state: &AppState) -> anyhow::Result<()> {
     // Try to access the database through the multimint interface
-    let _federations = state.multimint.all().await;
+    let _federations = state.multimint().all().await;
     Ok(())
 }
 
 /// Test database operation performance
 async fn test_database_operation(state: &AppState) -> anyhow::Result<serde_json::Value> {
-    let federations = state.multimint.all().await;
+    let federations = state.multimint().all().await;
 
     Ok(serde_json::json!({
         "federation_count": federations.len(),
@@ -389,7 +389,7 @@ async fn check_event_bus_health(state: &AppState) -> ComponentHealth {
 
 /// Check event bus connectivity
 async fn check_event_bus_connectivity(state: &AppState) -> anyhow::Result<serde_json::Value> {
-    let stats = state.event_bus.stats().await;
+    let stats = state.event_bus().stats().await;
 
     Ok(serde_json::json!({
         "capacity": stats.capacity,

@@ -23,11 +23,11 @@ async fn test_multimint_federation_operations() {
     let state = AppState::new(work_dir).await.unwrap();
 
     // Test getting federation IDs when none exist
-    let ids = state.multimint.ids().await;
+    let ids = state.multimint().ids().await;
     assert!(ids.is_empty(), "Should have no federations initially");
 
     // Test getting clients when none exist
-    let clients = state.multimint.clients.lock().await;
+    let clients = state.multimint().clients.lock().await;
     assert_eq!(clients.len(), 0);
 }
 
@@ -64,6 +64,6 @@ async fn test_update_gateway_caches() {
     let state = AppState::new(work_dir).await.unwrap();
 
     // Should handle empty client list gracefully
-    let result = state.multimint.update_gateway_caches().await;
+    let result = state.multimint().update_gateway_caches().await;
     assert!(result.is_ok(), "Should handle empty gateway cache update");
 }

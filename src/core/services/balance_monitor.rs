@@ -11,8 +11,8 @@ use tokio::sync::{broadcast, Mutex, RwLock};
 use tokio::time::interval;
 use tracing::{debug, error, info, instrument, warn};
 
+use crate::core::multimint::MultiMint;
 use crate::events::{EventBus, FmcdEvent};
-use crate::multimint::MultiMint;
 
 /// Configuration for the balance monitor service
 #[derive(Debug, Clone)]

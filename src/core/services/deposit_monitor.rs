@@ -15,8 +15,8 @@ use tokio::sync::{broadcast, Mutex, RwLock};
 use tokio::time::interval;
 use tracing::{debug, error, info, instrument, warn};
 
+use crate::core::multimint::MultiMint;
 use crate::events::{EventBus, FmcdEvent};
-use crate::multimint::MultiMint;
 
 /// Efficient subscription manager for deposit operations to avoid recreating
 /// subscriptions
