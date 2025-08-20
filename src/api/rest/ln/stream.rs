@@ -16,8 +16,8 @@ use serde::Deserialize;
 use tokio_stream::wrappers::IntervalStream;
 use tracing::{error, info, warn};
 
+use crate::api::rest::ln::invoice::{InvoiceStatus, InvoiceStatusUpdate, SettlementInfo};
 use crate::error::AppError;
-use crate::router::handlers::ln::invoice::{InvoiceStatus, InvoiceStatusUpdate, SettlementInfo};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -255,7 +255,7 @@ pub async fn handle_global_event_stream(
     State(state): State<AppState>,
     Query(query): Query<EventStreamQuery>,
 ) -> Result<Response, AppError> {
-    let mut event_receiver = state.event_bus.subscribe();
+    let mut event_receiver = state.event_bus().subscribe();
     let federation_id = query.federation_id.to_string();
     let heartbeat_interval = Duration::from_secs(query.heartbeat_interval.unwrap_or(30));
     let filter_ids = query.filter_ids.unwrap_or_default();

@@ -18,9 +18,9 @@ use serde_json::{json, Value};
 use tracing::{error, info, instrument, warn};
 use uuid::Uuid;
 
+use crate::core::operations::payment::InvoiceTracker;
 use crate::error::AppError;
 use crate::observability::correlation::RequestContext;
-use crate::operations::payment::InvoiceTracker;
 use crate::state::AppState;
 
 /// Invoice creation request with essential fields
@@ -205,7 +205,7 @@ async fn _create_invoice(
     let invoice_tracker = InvoiceTracker::new(
         invoice_id.clone(),
         req.federation_id,
-        state.event_bus.clone(),
+        state.event_bus().clone(),
         Some(context.clone()),
     );
 
@@ -231,7 +231,7 @@ async fn _create_invoice(
 
     // Register with payment lifecycle manager for comprehensive tracking and ecash
     // claiming
-    if let Some(ref payment_lifecycle_manager) = state.payment_lifecycle_manager {
+    if let Some(ref payment_lifecycle_manager) = state.payment_lifecycle_manager() {
         if let Err(e) = payment_lifecycle_manager
             .track_lightning_receive(
                 operation_id,

@@ -14,16 +14,16 @@ use axum::Router;
 use clap::{Parser, Subcommand, ValueEnum};
 use console::{style, Term};
 use fedimint_core::invite_code::InviteCode;
+use fmcd::api::rest::{admin, ln, mint, onchain};
+use fmcd::api::websockets::websocket_handler;
 use fmcd::auth::{basic_auth_middleware, BasicAuth, WebSocketAuth};
 use fmcd::config::Config;
+use fmcd::core::FmcdCore;
 use fmcd::health::{health_check, liveness_check, readiness_check};
 use fmcd::metrics::{api_metrics, init_prometheus_metrics};
 use fmcd::observability::correlation::create_request_id_middleware;
 use fmcd::observability::{init_logging, LoggingConfig};
-use fmcd::router::handlers::{admin, ln, mint, onchain};
-use fmcd::router::ws::websocket_handler;
 use fmcd::state::AppState;
-use futures::future::TryFutureExt;
 use metrics_exporter_prometheus::{Matcher, PrometheusBuilder, PrometheusHandle};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
@@ -54,7 +54,7 @@ enum Commands {
 }
 
 #[derive(Parser)]
-#[clap(version = "1.0", author = "Kody Low")]
+#[clap(version = "1.0")]
 struct Cli {
     /// Data directory path (contains config and database)
     #[clap(long, env = "FMCD_DATA_DIR", default_value = ".")]
@@ -148,16 +148,14 @@ async fn main() -> Result<()> {
         config.http_password = None;
     }
 
-    // Database path is always the data directory
-    let db_path = cli.data_dir.clone();
-
-    let mut state = AppState::new_with_config(db_path, config.webhooks.clone()).await?;
+    // Initialize FmcdCore with the data directory
+    let mut core = FmcdCore::new_with_config(cli.data_dir.clone(), config.webhooks.clone()).await?;
 
     // Handle federation invite code
     if let Some(invite_code_str) = &config.invite_code {
         match InviteCode::from_str(invite_code_str) {
             Ok(invite_code) => {
-                let federation_id = state.multimint.register_new(invite_code).await?;
+                let federation_id = core.join_federation(invite_code).await?;
                 info!("Created client for federation id: {:?}", federation_id);
             }
             Err(e) => {
@@ -169,16 +167,19 @@ async fn main() -> Result<()> {
         }
     }
 
-    if state.multimint.all().await.is_empty() {
+    if core.multimint.all().await.is_empty() {
         return Err(anyhow::anyhow!("No clients found, must have at least one client to start the server. Try providing a federation invite code with the `--invite-code` flag or setting the `FMCD_INVITE_CODE` environment variable."));
     }
 
     // Start monitoring services for full observability parity
-    if let Err(e) = state.start_monitoring_services().await {
+    if let Err(e) = core.start_monitoring_services().await {
         tracing::warn!("Failed to start monitoring services: {}", e);
     } else {
         tracing::info!("Monitoring services started successfully");
     }
+
+    // Create AppState with the core
+    let state = AppState::new_with_core(core).await?;
 
     start_main_server(&config, cli.mode, state).await?;
     Ok(())

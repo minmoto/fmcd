@@ -12,10 +12,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::{info, instrument};
 
+use crate::core::services::deposit_monitor::DepositInfo;
 use crate::error::AppError;
 use crate::events::FmcdEvent;
 use crate::observability::correlation::RequestContext;
-use crate::services::deposit_monitor::DepositInfo;
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -60,7 +60,7 @@ async fn _deposit_address(
     span.record("address", &address.to_string());
 
     // Emit deposit address generated event
-    let event_bus = state.event_bus.clone();
+    let event_bus = state.event_bus().clone();
     let federation_id = req.federation_id.to_string();
     let address_str = address.to_string();
     let operation_id_str = format!("{:?}", operation_id);
@@ -78,7 +78,7 @@ async fn _deposit_address(
     });
 
     // Register deposit with monitor for detection
-    if let Some(ref deposit_monitor) = state.deposit_monitor {
+    if let Some(ref deposit_monitor) = state.deposit_monitor() {
         let deposit_info = DepositInfo {
             operation_id,
             federation_id: req.federation_id,
@@ -105,7 +105,7 @@ async fn _deposit_address(
     }
 
     // Register with payment lifecycle manager for automatic ecash claiming
-    if let Some(ref payment_lifecycle_manager) = state.payment_lifecycle_manager {
+    if let Some(ref payment_lifecycle_manager) = state.payment_lifecycle_manager() {
         if let Err(e) = payment_lifecycle_manager
             .track_onchain_deposit(
                 operation_id,

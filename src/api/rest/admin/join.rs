@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::{info, instrument};
 
+use crate::core::multimint::MultiMint;
 use crate::error::AppError;
 use crate::events::FmcdEvent;
-use crate::multimint::MultiMint;
 use crate::observability::correlation::RequestContext;
 use crate::state::AppState;
 
@@ -55,7 +55,7 @@ async fn _join(
         .await
         .map_err(|e| {
             // Emit federation connection failed event
-            let event_bus = state.event_bus.clone();
+            let event_bus = state.event_bus().clone();
             let federation_id_str = federation_id.to_string();
             let correlation_id = context.as_ref().map(|c| c.correlation_id.clone());
             let error_msg = e.to_string();
@@ -74,7 +74,7 @@ async fn _join(
         })?;
 
     // Emit federation connection success event
-    let event_bus = state.event_bus.clone();
+    let event_bus = state.event_bus().clone();
     let federation_id_str = this_federation_id.to_string();
     let correlation_id = context.as_ref().map(|c| c.correlation_id.clone());
     tokio::spawn(async move {
@@ -105,7 +105,7 @@ pub async fn handle_ws(state: AppState, v: Value) -> Result<Value, AppError> {
         .map_err(|e| AppError::new(StatusCode::BAD_REQUEST, anyhow!("Invalid request: {}", e)))?;
     // TODO: WebSocket requests should get RequestContext from middleware
     let context = Some(RequestContext::new(None));
-    let join = _join(state.multimint.clone(), v, &state, context).await?;
+    let join = _join(state.multimint().clone(), v, &state, context).await?;
     let join_json = json!(join);
     Ok(join_json)
 }
@@ -116,6 +116,6 @@ pub async fn handle_rest(
     Extension(context): Extension<RequestContext>,
     Json(req): Json<JoinRequest>,
 ) -> Result<Json<JoinResponse>, AppError> {
-    let join = _join(state.multimint.clone(), req, &state, Some(context)).await?;
+    let join = _join(state.multimint().clone(), req, &state, Some(context)).await?;
     Ok(Json(join))
 }

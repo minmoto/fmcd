@@ -4,8 +4,8 @@ use axum::extract::State;
 use axum::Json;
 use serde_json::{json, Value};
 
+use crate::core::multimint::MultiMint;
 use crate::error::AppError;
-use crate::multimint::MultiMint;
 use crate::state::AppState;
 
 async fn _version(multimint: MultiMint) -> Result<Value, AppError> {
@@ -20,13 +20,13 @@ async fn _version(multimint: MultiMint) -> Result<Value, AppError> {
 }
 
 pub async fn handle_ws(state: AppState) -> Result<Value, AppError> {
-    let version = _version(state.multimint).await?;
+    let version = _version(state.multimint().clone()).await?;
     let version_json = json!(version);
     Ok(version_json)
 }
 
 #[axum_macros::debug_handler]
 pub async fn handle_rest(State(state): State<AppState>) -> Result<Json<Value>, AppError> {
-    let version = _version(state.multimint).await?;
+    let version = _version(state.multimint().clone()).await?;
     Ok(Json(version))
 }

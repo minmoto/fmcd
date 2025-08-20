@@ -1,22 +1,11 @@
 # Fedimint Clientd (fmcd) Curl Examples
 
-## Authorization Setup
+## Quick Setup
 All requests require Basic Authentication with username `fmcd` and your configured password.
 
 ```bash
 # Set your password (replace with your actual password)
 FMCD_PASS="bdb056904c8971cedf717265176f99e25f0c43e9f8294c69967b184c3dca768e"
-
-# Create the Basic Auth header (using -w0 to prevent line wrapping)
-FMCD_AUTH_TOKEN=$(echo -n "fmcd:$FMCD_PASS" | base64 -w0)
-
-# Use in requests
-curl -H "Authorization: Basic $FMCD_AUTH_TOKEN" ...
-```
-
-## Common Variables
-```bash
-# Set these for easier testing
 FMCD_URL="http://127.0.0.1:7070"
 FEDERATION_ID="15db8cb4f1ec8e484d73b889372bec94812580f929e8148b7437d359af422cd3"
 GATEWAY_ID="035f2f7912e0f570841d5c0d8976a40af0dcca5609198436f596e78d2c851ee58a"
@@ -27,19 +16,16 @@ GATEWAY_ID="035f2f7912e0f570841d5c0d8976a40af0dcca5609198436f596e78d2c851ee58a"
 ### Get Federation Info
 ```bash
 # Get info for all connected federations
-curl -X GET "$FMCD_URL/v2/admin/info" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" | jq .
+curl -s -u "fmcd:$FMCD_PASS" "$FMCD_URL/v2/admin/info" | jq .
 
 # List federations with balances
-curl -X GET "$FMCD_URL/v2/admin/info" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" | jq 'to_entries | map({id: .key, name: .value.meta.federation_name, totalAmountMsat: .value.totalAmountMsat})'
+curl -s -u "fmcd:$FMCD_PASS" "$FMCD_URL/v2/admin/info" | jq 'to_entries | map({id: .key, name: .value.meta.federation_name, totalAmountMsat: .value.totalAmountMsat})'
 ```
 
 ### List Operations
 ```bash
 # Get recent operations for a federation
-curl -X POST "$FMCD_URL/v2/admin/operations" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/admin/operations" \
   -H "Content-Type: application/json" \
   -d "{
     \"federationId\": \"$FEDERATION_ID\",
@@ -50,8 +36,7 @@ curl -X POST "$FMCD_URL/v2/admin/operations" \
 ### Join Federation
 ```bash
 # Join a new federation with an invite code
-curl -X POST "$FMCD_URL/v2/admin/join" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/admin/join" \
   -H "Content-Type: application/json" \
   -d '{
     "inviteCode": "fed11qgqrgvnhwden5te0v9k8q6rp9ekh2arfdeukuet595cr2ttpd3jhq6rzve6zuer9wchxvetyd938gcewvdhk6tcqqysptkuvknc7erjgf4em3zfh90kffqf9srujn6q53d6r056qd5apxw6jxgcqqqqqq"
@@ -61,15 +46,13 @@ curl -X POST "$FMCD_URL/v2/admin/join" \
 ### List Federations
 ```bash
 # Get list of all connected federations
-curl -X GET "$FMCD_URL/v2/admin/federations" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" | jq
+curl -s -u "fmcd:$FMCD_PASS" "$FMCD_URL/v2/admin/federations" | jq
 ```
 
 ### Backup Federation
 ```bash
 # Create a backup of a federation
-curl -X POST "$FMCD_URL/v2/admin/backup" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/admin/backup" \
   -H "Content-Type: application/json" \
   -d "{
     \"federationId\": \"$FEDERATION_ID\"
@@ -79,8 +62,7 @@ curl -X POST "$FMCD_URL/v2/admin/backup" \
 ### Restore Federation
 ```bash
 # Restore a federation from backup
-curl -X POST "$FMCD_URL/v2/admin/restore" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/admin/restore" \
   -H "Content-Type: application/json" \
   -d '{
     "backup": "YOUR_BACKUP_STRING_HERE"
@@ -90,15 +72,13 @@ curl -X POST "$FMCD_URL/v2/admin/restore" \
 ### Get Version
 ```bash
 # Get fmcd version information
-curl -X GET "$FMCD_URL/v2/admin/version" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" | jq
+curl -s -u "fmcd:$FMCD_PASS" "$FMCD_URL/v2/admin/version" | jq
 ```
 
 ### Get Module Info
 ```bash
 # Get information about federation modules
-curl -X POST "$FMCD_URL/v2/admin/module" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/admin/module" \
   -H "Content-Type: application/json" \
   -d "{
     \"federationId\": \"$FEDERATION_ID\",
@@ -109,8 +89,7 @@ curl -X POST "$FMCD_URL/v2/admin/module" \
 ### Get Config
 ```bash
 # Get current configuration
-curl -X GET "$FMCD_URL/v2/admin/config" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" | jq
+curl -s -u "fmcd:$FMCD_PASS" "$FMCD_URL/v2/admin/config" | jq
 ```
 
 ## Lightning (LN) Endpoints
@@ -118,8 +97,7 @@ curl -X GET "$FMCD_URL/v2/admin/config" \
 ### List Gateways
 ```bash
 # Get available gateways for a federation
-curl -X POST "$FMCD_URL/v2/ln/gateways" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/ln/gateways" \
   -H "Content-Type: application/json" \
   -d "{
     \"federationId\": \"$FEDERATION_ID\"
@@ -129,8 +107,7 @@ curl -X POST "$FMCD_URL/v2/ln/gateways" \
 ### Create Invoice
 ```bash
 # Generate a Lightning invoice
-curl -X POST "$FMCD_URL/v2/ln/invoice" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/ln/invoice" \
   -H "Content-Type: application/json" \
   -d "{
     \"amountMsat\": 1000000,
@@ -144,8 +121,7 @@ curl -X POST "$FMCD_URL/v2/ln/invoice" \
 ### Pay Invoice
 ```bash
 # Pay a Lightning invoice
-curl -X POST "$FMCD_URL/v2/ln/pay" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/ln/pay" \
   -H "Content-Type: application/json" \
   -d "{
     \"paymentInfo\": \"lnbc100n1p3ehk5...\",
@@ -157,8 +133,7 @@ curl -X POST "$FMCD_URL/v2/ln/pay" \
 ### Check Payment Status
 ```bash
 # Get status of a Lightning payment
-curl -X POST "$FMCD_URL/v2/ln/status" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/ln/status" \
   -H "Content-Type: application/json" \
   -d "{
     \"operationId\": \"OPERATION_ID_HERE\",
@@ -171,8 +146,7 @@ curl -X POST "$FMCD_URL/v2/ln/status" \
 ### Get Deposit Address
 ```bash
 # Generate a Bitcoin deposit address
-curl -X POST "$FMCD_URL/v2/onchain/deposit-address" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/onchain/deposit-address" \
   -H "Content-Type: application/json" \
   -d "{
     \"federationId\": \"$FEDERATION_ID\"
@@ -182,8 +156,7 @@ curl -X POST "$FMCD_URL/v2/onchain/deposit-address" \
 ### Await Deposit
 ```bash
 # Wait for a deposit to be confirmed (with timeout)
-curl -X POST "$FMCD_URL/v2/onchain/await-deposit" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/onchain/await-deposit" \
   -H "Content-Type: application/json" \
   -d "{
     \"operationId\": \"OPERATION_ID_HERE\",
@@ -195,8 +168,7 @@ curl -X POST "$FMCD_URL/v2/onchain/await-deposit" \
 ### Withdraw to Address
 ```bash
 # Withdraw Bitcoin to an on-chain address
-curl -X POST "$FMCD_URL/v2/onchain/withdraw" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/onchain/withdraw" \
   -H "Content-Type: application/json" \
   -d "{
     \"address\": \"tb1qexampleaddress...\",
@@ -211,8 +183,7 @@ curl -X POST "$FMCD_URL/v2/onchain/withdraw" \
 ### Encode Notes
 ```bash
 # Encode ecash notes
-curl -X POST "$FMCD_URL/v2/mint/encode-notes" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/mint/encode-notes" \
   -H "Content-Type: application/json" \
   -d "{
     \"notes\": \"NOTES_DATA_HERE\",
@@ -223,8 +194,7 @@ curl -X POST "$FMCD_URL/v2/mint/encode-notes" \
 ### Decode Notes
 ```bash
 # Decode ecash notes
-curl -X POST "$FMCD_URL/v2/mint/decode-notes" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/mint/decode-notes" \
   -H "Content-Type: application/json" \
   -d "{
     \"notes\": \"ENCODED_NOTES_HERE\",
@@ -235,8 +205,7 @@ curl -X POST "$FMCD_URL/v2/mint/decode-notes" \
 ### Split Notes
 ```bash
 # Split ecash notes into smaller denominations
-curl -X POST "$FMCD_URL/v2/mint/split" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/mint/split" \
   -H "Content-Type: application/json" \
   -d "{
     \"notes\": \"NOTES_TO_SPLIT\",
@@ -248,8 +217,7 @@ curl -X POST "$FMCD_URL/v2/mint/split" \
 ### Combine Notes
 ```bash
 # Combine multiple ecash notes
-curl -X POST "$FMCD_URL/v2/mint/combine" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/mint/combine" \
   -H "Content-Type: application/json" \
   -d "{
     \"notes\": [\"NOTE1\", \"NOTE2\"],
@@ -260,8 +228,7 @@ curl -X POST "$FMCD_URL/v2/mint/combine" \
 ### Spend Notes
 ```bash
 # Spend ecash notes
-curl -X POST "$FMCD_URL/v2/mint/spend" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/mint/spend" \
   -H "Content-Type: application/json" \
   -d "{
     \"amountMsat\": 100000,
@@ -275,8 +242,7 @@ curl -X POST "$FMCD_URL/v2/mint/spend" \
 ### Validate Notes
 ```bash
 # Validate ecash notes
-curl -X POST "$FMCD_URL/v2/mint/validate" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/mint/validate" \
   -H "Content-Type: application/json" \
   -d "{
     \"notes\": \"NOTES_TO_VALIDATE\",
@@ -287,8 +253,7 @@ curl -X POST "$FMCD_URL/v2/mint/validate" \
 ### Reissue Notes
 ```bash
 # Reissue ecash notes
-curl -X POST "$FMCD_URL/v2/mint/reissue" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/mint/reissue" \
   -H "Content-Type: application/json" \
   -d "{
     \"notes\": \"NOTES_TO_REISSUE\",
@@ -301,6 +266,8 @@ curl -X POST "$FMCD_URL/v2/mint/reissue" \
 ### Connect to WebSocket
 ```bash
 # Using wscat (install with: npm install -g wscat)
+# Note: WebSocket authentication uses Basic Auth header
+FMCD_AUTH_TOKEN=$(echo -n "fmcd:$FMCD_PASS" | base64 -w0)
 wscat -c "ws://localhost:7070/ws" \
   -H "Authorization: Basic $FMCD_AUTH_TOKEN"
 ```
@@ -331,15 +298,13 @@ Once connected, send JSON requests in this format:
 ### Complete Invoice Flow
 ```bash
 # 1. Get a gateway
-GATEWAY_RESPONSE=$(curl -s -X POST "$FMCD_URL/v2/ln/gateways" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+GATEWAY_RESPONSE=$(curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/ln/gateways" \
   -H "Content-Type: application/json" \
   -d "{\"federationId\": \"$FEDERATION_ID\"}")
 GATEWAY_ID=$(echo $GATEWAY_RESPONSE | jq -r '.gateways[0].gatewayId')
 
 # 2. Create an invoice
-INVOICE_RESPONSE=$(curl -s -X POST "$FMCD_URL/v2/ln/invoice" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+INVOICE_RESPONSE=$(curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/ln/invoice" \
   -H "Content-Type: application/json" \
   -d "{
     \"amountMsat\": 1000000,
@@ -354,8 +319,7 @@ echo "Invoice: $INVOICE"
 echo "Operation ID: $OPERATION_ID"
 
 # 3. Check payment status
-curl -X POST "$FMCD_URL/v2/ln/status" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" \
+curl -s -u "fmcd:$FMCD_PASS" -X POST "$FMCD_URL/v2/ln/status" \
   -H "Content-Type: application/json" \
   -d "{
     \"operationId\": \"$OPERATION_ID\",
@@ -366,8 +330,7 @@ curl -X POST "$FMCD_URL/v2/ln/status" \
 ### Check Balance
 ```bash
 # Get total balance across all federations
-curl -s -X GET "$FMCD_URL/v2/admin/info" \
-  -H "Authorization: Basic $FMCD_AUTH_TOKEN" | \
+curl -s -u "fmcd:$FMCD_PASS" "$FMCD_URL/v2/admin/info" | \
   jq '[.[] | .totalAmountMsat] | add | . / 1000 | "Total: \(.) sats"'
 ```
 
