@@ -155,7 +155,7 @@ async fn main() -> Result<()> {
     if let Some(invite_code_str) = &config.invite_code {
         match InviteCode::from_str(invite_code_str) {
             Ok(invite_code) => {
-                let federation_id = core.join_federation(invite_code).await?;
+                let federation_id = core.join_federation(invite_code, None).await?;
                 info!("Created client for federation id: {:?}", federation_id);
             }
             Err(e) => {

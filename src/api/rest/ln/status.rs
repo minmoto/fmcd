@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tracing::{error, info, instrument, warn};
 
-use crate::api::rest::ln::invoice::{InvoiceStatus, SettlementInfo};
+use crate::core::{InvoiceStatus, SettlementInfo};
 use crate::error::AppError;
 use crate::state::AppState;
 
