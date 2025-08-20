@@ -16,9 +16,20 @@ use serde::Deserialize;
 use tokio_stream::wrappers::IntervalStream;
 use tracing::{error, info, warn};
 
-use crate::api::rest::ln::invoice::{InvoiceStatus, InvoiceStatusUpdate, SettlementInfo};
+use crate::core::{InvoiceStatus, SettlementInfo};
 use crate::error::AppError;
 use crate::state::AppState;
+
+/// Invoice status update for streaming
+#[derive(Debug, serde::Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct InvoiceStatusUpdate {
+    pub invoice_id: String,
+    pub operation_id: OperationId,
+    pub status: InvoiceStatus,
+    pub settlement: Option<SettlementInfo>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
