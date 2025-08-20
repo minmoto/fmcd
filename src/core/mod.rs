@@ -8,16 +8,18 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Result};
+use bitcoin::{Address, Txid};
 use fedimint_client::ClientHandleArc;
 use fedimint_core::config::{FederationId, FederationIdPrefix};
 use fedimint_core::core::OperationId;
 use fedimint_core::invite_code::InviteCode;
 use fedimint_core::secp256k1::PublicKey;
-use fedimint_core::{Amount, TieredCounts};
+use fedimint_core::{Amount, BitcoinAmountOrAll, TieredCounts};
 use fedimint_ln_client::{LightningClientModule, OutgoingLightningPayment, PayType};
 use fedimint_ln_common::lightning_invoice::{Bolt11InvoiceDescription, Description};
 use fedimint_mint_client::MintClientModule;
-use fedimint_wallet_client::WalletClientModule;
+use fedimint_wallet_client::client_db::TweakIdx;
+use fedimint_wallet_client::{WalletClientModule, WithdrawState};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
 
@@ -34,6 +36,22 @@ use crate::events::handlers::{LoggingEventHandler, MetricsEventHandler};
 use crate::events::EventBus;
 use crate::observability::correlation::RequestContext;
 use crate::webhooks::{WebhookConfig, WebhookNotifier};
+
+/// Trait for resolving payment information into Bolt11 invoices
+/// This allows the core to remain agnostic about web protocols like LNURL
+/// while allowing the API layer to provide resolution capabilities
+#[async_trait::async_trait]
+pub trait PaymentInfoResolver: Send + Sync {
+    /// Resolve payment info (LNURL, Lightning Address, etc.) into a Bolt11
+    /// invoice Returns the invoice string if resolution was successful, or
+    /// None if the payment_info should be treated as a raw Bolt11 invoice
+    async fn resolve_payment_info(
+        &self,
+        payment_info: &str,
+        amount_msat: Option<Amount>,
+        lnurl_comment: Option<&str>,
+    ) -> Result<Option<String>, AppError>;
+}
 
 /// Invoice creation request with essential fields
 #[derive(Debug, Deserialize)]
@@ -120,13 +138,57 @@ pub struct InfoResponse {
     pub network: String,
     pub meta: BTreeMap<String, String>,
     pub total_amount_msat: Amount,
+    /// Number of ecash notes in the mint module (does not include on-chain or
+    /// lightning balances)
     pub total_num_notes: usize,
+    /// Breakdown of ecash notes by denomination in the mint module
     pub denominations_msat: TieredCounts,
+}
+
+/// Join federation response
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JoinFederationResponse {
+    pub this_federation_id: FederationId,
+    pub federation_ids: Vec<FederationId>,
+}
+
+/// Onchain withdraw request
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WithdrawRequest {
+    pub address: String,
+    pub amount_sat: BitcoinAmountOrAll,
+    pub federation_id: FederationId,
+}
+
+/// Onchain withdraw response
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WithdrawResponse {
+    pub txid: Txid,
+    pub fees_sat: u64,
+}
+
+/// Deposit address request
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DepositAddressRequest {
+    pub federation_id: FederationId,
+}
+
+/// Deposit address response
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DepositAddressResponse {
+    pub address: String,
+    pub operation_id: OperationId,
+    pub tweak_idx: TweakIdx,
 }
 
 /// Main entry point for library consumers
 pub struct FmcdCore {
-    pub multimint: MultiMint,
+    pub multimint: Arc<MultiMint>,
     pub start_time: Instant,
     pub event_bus: Arc<EventBus>,
     pub deposit_monitor: Option<Arc<DepositMonitor>>,
@@ -142,6 +204,7 @@ impl FmcdCore {
     pub async fn new_with_config(data_dir: PathBuf, webhook_config: WebhookConfig) -> Result<Self> {
         let multimint = MultiMint::new(data_dir).await?;
         multimint.update_gateway_caches().await?;
+        let multimint = Arc::new(multimint);
 
         // Initialize event bus with reasonable capacity
         let event_bus = Arc::new(EventBus::new(1000));
@@ -172,19 +235,19 @@ impl FmcdCore {
         // Initialize monitoring services
         let deposit_monitor = Arc::new(DepositMonitor::new(
             event_bus.clone(),
-            Arc::new(multimint.clone()),
+            multimint.clone(),
             DepositMonitorConfig::default(),
         ));
 
         let balance_monitor = Arc::new(BalanceMonitor::new(
             event_bus.clone(),
-            Arc::new(multimint.clone()),
+            multimint.clone(),
             BalanceMonitorConfig::default(),
         ));
 
         let payment_lifecycle_manager = Arc::new(PaymentLifecycleManager::new(
             event_bus.clone(),
-            Arc::new(multimint.clone()),
+            multimint.clone(),
             PaymentLifecycleConfig::default(),
         ));
 
@@ -307,10 +370,76 @@ impl FmcdCore {
     }
 
     /// Join a federation with an invite code
-    pub async fn join_federation(&mut self, invite_code: InviteCode) -> Result<FederationId> {
-        let federation_id = self.multimint.register_new(invite_code).await?;
-        info!("Created client for federation id: {:?}", federation_id);
-        Ok(federation_id)
+    pub async fn join_federation(
+        &self,
+        invite_code: InviteCode,
+        context: Option<RequestContext>,
+    ) -> Result<JoinFederationResponse> {
+        use chrono::Utc;
+
+        use crate::events::FmcdEvent;
+
+        let federation_id = invite_code.federation_id();
+
+        info!(
+            federation_id = %federation_id,
+            "Attempting to join federation"
+        );
+
+        // Clone multimint which is cheap due to Arc
+        let mut multimint = (*self.multimint).clone();
+
+        let this_federation_id =
+            multimint
+                .register_new(invite_code.clone())
+                .await
+                .map_err(|e| {
+                    // Emit federation connection failed event
+                    let event_bus = self.event_bus.clone();
+                    let federation_id_str = federation_id.to_string();
+                    let correlation_id = context.as_ref().map(|c| c.correlation_id.clone());
+                    let error_msg = e.to_string();
+
+                    tokio::spawn(async move {
+                        let event = FmcdEvent::FederationDisconnected {
+                            federation_id: federation_id_str,
+                            reason: format!("Failed to join: {}", error_msg),
+                            correlation_id,
+                            timestamp: Utc::now(),
+                        };
+                        let _ = event_bus.publish(event).await;
+                    });
+
+                    e
+                })?;
+
+        // Emit federation connection success event
+        let event_bus = self.event_bus.clone();
+        let federation_id_str = this_federation_id.to_string();
+        let correlation_id = context.as_ref().map(|c| c.correlation_id.clone());
+
+        tokio::spawn(async move {
+            let event = FmcdEvent::FederationConnected {
+                federation_id: federation_id_str,
+                correlation_id,
+                timestamp: Utc::now(),
+            };
+            let _ = event_bus.publish(event).await;
+        });
+
+        // Get all federation IDs
+        let federation_ids = self.multimint.ids().await.into_iter().collect::<Vec<_>>();
+
+        info!(
+            federation_id = %this_federation_id,
+            total_federations = federation_ids.len(),
+            "Successfully joined federation"
+        );
+
+        Ok(JoinFederationResponse {
+            this_federation_id,
+            federation_ids,
+        })
     }
 
     /// Get wallet info for all federations
@@ -323,12 +452,15 @@ impl FmcdCore {
             let mut dbtx = client.db().begin_transaction_nc().await;
             let summary = mint_client.get_note_counts_by_denomination(&mut dbtx).await;
 
+            // Get the actual total balance from the client (includes all modules)
+            let total_balance = client.get_balance().await;
+
             info.insert(
                 *id,
                 InfoResponse {
                     network: wallet_client.get_network().to_string(),
                     meta: client.config().await.global.meta.clone(),
-                    total_amount_msat: summary.total_amount(),
+                    total_amount_msat: total_balance,
                     total_num_notes: summary.count_items(),
                     denominations_msat: summary,
                 },
@@ -504,24 +636,385 @@ impl FmcdCore {
         Ok(response)
     }
 
+    /// Generate a deposit address for receiving on-chain payments
+    pub async fn create_deposit_address(
+        &self,
+        req: DepositAddressRequest,
+        context: RequestContext,
+    ) -> Result<DepositAddressResponse, AppError> {
+        use chrono::Utc;
+
+        use crate::core::services::deposit_monitor::DepositInfo;
+        use crate::events::FmcdEvent;
+
+        let client = self.get_client(req.federation_id).await?;
+        let wallet_module = client
+            .get_first_module::<WalletClientModule>()
+            .map_err(|e| {
+                error!(
+                    federation_id = %req.federation_id,
+                    error = ?e,
+                    "Failed to get wallet module from fedimint client"
+                );
+                AppError::new(
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    anyhow!("Failed to get wallet module: {}", e),
+                )
+            })?;
+
+        let (operation_id, address, tweak_idx) = wallet_module
+            .allocate_deposit_address_expert_only(())
+            .await
+            .map_err(|e| {
+                error!(
+                    federation_id = %req.federation_id,
+                    error = ?e,
+                    "Failed to generate deposit address"
+                );
+                AppError::new(
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    anyhow!("Failed to generate deposit address: {}", e),
+                )
+            })?;
+
+        // Emit deposit address generated event
+        let event_bus = self.event_bus.clone();
+        let federation_id_str = req.federation_id.to_string();
+        let address_str = address.to_string();
+        let operation_id_str = format!("{:?}", operation_id);
+        let correlation_id = context.correlation_id.clone();
+
+        tokio::spawn(async move {
+            let event = FmcdEvent::DepositAddressGenerated {
+                operation_id: operation_id_str,
+                federation_id: federation_id_str,
+                address: address_str,
+                correlation_id: Some(correlation_id),
+                timestamp: Utc::now(),
+            };
+            let _ = event_bus.publish(event).await;
+        });
+
+        // Register deposit with monitor for detection
+        if let Some(ref deposit_monitor) = self.deposit_monitor {
+            let deposit_info = DepositInfo {
+                operation_id,
+                federation_id: req.federation_id,
+                address: address.to_string(),
+                correlation_id: Some(context.correlation_id.clone()),
+                created_at: Utc::now(),
+            };
+
+            if let Err(e) = deposit_monitor.add_deposit(deposit_info).await {
+                // Log error but don't fail the request - monitoring is best effort
+                warn!(
+                    operation_id = ?operation_id,
+                    federation_id = %req.federation_id,
+                    error = ?e,
+                    "Failed to register deposit with monitor"
+                );
+            } else {
+                info!(
+                    operation_id = ?operation_id,
+                    federation_id = %req.federation_id,
+                    "Deposit registered with monitor"
+                );
+            }
+        }
+
+        // Register with payment lifecycle manager for automatic ecash claiming
+        if let Some(ref payment_lifecycle_manager) = self.payment_lifecycle_manager {
+            if let Err(e) = payment_lifecycle_manager
+                .track_onchain_deposit(
+                    operation_id,
+                    req.federation_id,
+                    Some(context.correlation_id.clone()),
+                )
+                .await
+            {
+                warn!(
+                    operation_id = ?operation_id,
+                    federation_id = %req.federation_id,
+                    error = ?e,
+                    "Failed to register deposit with payment lifecycle manager"
+                );
+            } else {
+                info!(
+                    operation_id = ?operation_id,
+                    federation_id = %req.federation_id,
+                    "Deposit registered with payment lifecycle manager for automatic ecash claiming"
+                );
+            }
+        }
+
+        info!(
+            federation_id = %req.federation_id,
+            operation_id = ?operation_id,
+            address = %address,
+            "Deposit address generated successfully"
+        );
+
+        Ok(DepositAddressResponse {
+            address: address.to_string(),
+            operation_id,
+            tweak_idx,
+        })
+    }
+
+    /// Withdraw funds to an on-chain Bitcoin address
+    pub async fn withdraw_onchain(
+        &self,
+        req: WithdrawRequest,
+        context: RequestContext,
+    ) -> Result<WithdrawResponse, AppError> {
+        use std::str::FromStr;
+
+        use chrono::Utc;
+        use futures_util::StreamExt;
+
+        use crate::events::FmcdEvent;
+
+        let client = self.get_client(req.federation_id).await?;
+        let wallet_module = client
+            .get_first_module::<WalletClientModule>()
+            .map_err(|e| {
+                error!(
+                    federation_id = %req.federation_id,
+                    error = ?e,
+                    "Failed to get wallet module from fedimint client"
+                );
+                AppError::new(
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    anyhow!("Failed to get wallet module: {}", e),
+                )
+            })?;
+
+        // Parse the address - from_str gives us Address<NetworkUnchecked>
+        let address_unchecked = Address::from_str(&req.address)
+            .map_err(|e| AppError::validation_error(format!("Invalid Bitcoin address: {}", e)))?;
+
+        // TODO: Properly validate network - for now assuming valid
+        let address = address_unchecked.assume_checked();
+        let (amount, fees) = match req.amount_sat {
+            // If the amount is "all", then we need to subtract the fees from
+            // the amount we are withdrawing
+            BitcoinAmountOrAll::All => {
+                let balance = bitcoin::Amount::from_sat(client.get_balance().await.msats / 1000);
+                let fees = wallet_module.get_withdraw_fees(&address, balance).await?;
+                let amount = balance.checked_sub(fees.amount());
+                let amount = match amount {
+                    Some(amount) => amount,
+                    None => {
+                        return Err(AppError::new(
+                            axum::http::StatusCode::BAD_REQUEST,
+                            anyhow!("Insufficient balance to pay fees"),
+                        ))
+                    }
+                };
+
+                (amount, fees)
+            }
+            BitcoinAmountOrAll::Amount(amount) => (
+                amount,
+                wallet_module.get_withdraw_fees(&address, amount).await?,
+            ),
+        };
+        let absolute_fees = fees.amount();
+
+        info!("Attempting withdraw with fees: {fees:?}");
+
+        let operation_id = wallet_module.withdraw(&address, amount, fees, ()).await?;
+
+        // Emit withdrawal initiated event
+        let withdrawal_initiated_event = FmcdEvent::WithdrawalInitiated {
+            operation_id: format!("{:?}", operation_id),
+            federation_id: req.federation_id.to_string(),
+            address: address.to_string(),
+            amount_sat: amount.to_sat(),
+            fee_sat: absolute_fees.to_sat(),
+            correlation_id: Some(context.correlation_id.clone()),
+            timestamp: Utc::now(),
+        };
+        if let Err(e) = self.event_bus.publish(withdrawal_initiated_event).await {
+            error!(
+                operation_id = ?operation_id,
+                correlation_id = %context.correlation_id,
+                error = ?e,
+                "Failed to publish withdrawal initiated event"
+            );
+        }
+
+        info!(
+            operation_id = ?operation_id,
+            address = %address,
+            amount_sat = amount.to_sat(),
+            fee_sat = absolute_fees.to_sat(),
+            "Withdrawal initiated"
+        );
+
+        // Register with payment lifecycle manager for comprehensive monitoring
+        if let Some(ref payment_lifecycle_manager) = self.payment_lifecycle_manager {
+            if let Err(e) = payment_lifecycle_manager
+                .track_onchain_withdraw(operation_id, req.federation_id, amount.to_sat())
+                .await
+            {
+                error!(
+                    operation_id = ?operation_id,
+                    error = ?e,
+                    "Failed to register withdrawal with payment lifecycle manager"
+                );
+            } else {
+                info!(
+                    operation_id = ?operation_id,
+                    "Withdrawal registered with payment lifecycle manager for monitoring"
+                );
+            }
+        }
+
+        let mut updates = wallet_module
+            .subscribe_withdraw_updates(operation_id)
+            .await?
+            .into_stream();
+
+        while let Some(update) = updates.next().await {
+            info!("Update: {update:?}");
+
+            match update {
+                WithdrawState::Succeeded(txid) => {
+                    // Emit withdrawal succeeded event
+                    let withdrawal_succeeded_event = FmcdEvent::WithdrawalSucceeded {
+                        operation_id: format!("{:?}", operation_id),
+                        federation_id: req.federation_id.to_string(),
+                        amount_sat: amount.to_sat(),
+                        txid: txid.to_string(),
+                        timestamp: Utc::now(),
+                    };
+                    if let Err(e) = self.event_bus.publish(withdrawal_succeeded_event).await {
+                        error!(
+                            operation_id = ?operation_id,
+                            correlation_id = %context.correlation_id,
+                            txid = %txid,
+                            error = ?e,
+                            "Failed to publish withdrawal completed event"
+                        );
+                    }
+
+                    info!(
+                        operation_id = ?operation_id,
+                        txid = %txid,
+                        "Withdrawal completed successfully"
+                    );
+
+                    return Ok(WithdrawResponse {
+                        txid: txid,
+                        fees_sat: absolute_fees.to_sat(),
+                    });
+                }
+                WithdrawState::Failed(e) => {
+                    let error_reason = format!("Withdraw failed: {:?}", e);
+
+                    // Emit withdrawal failed event
+                    let withdrawal_failed_event = FmcdEvent::WithdrawalFailed {
+                        operation_id: format!("{:?}", operation_id),
+                        federation_id: req.federation_id.to_string(),
+                        reason: error_reason.clone(),
+                        correlation_id: Some(context.correlation_id.clone()),
+                        timestamp: Utc::now(),
+                    };
+                    if let Err(event_err) = self.event_bus.publish(withdrawal_failed_event).await {
+                        error!(
+                            operation_id = ?operation_id,
+                            correlation_id = %context.correlation_id,
+                            error = ?event_err,
+                            "Failed to publish withdrawal failed event"
+                        );
+                    }
+
+                    error!(
+                        operation_id = ?operation_id,
+                        error = ?e,
+                        "Withdrawal failed"
+                    );
+
+                    return Err(AppError::new(
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        anyhow!("{}", error_reason),
+                    ));
+                }
+                _ => continue,
+            };
+        }
+
+        // Emit withdrawal failed event for stream ending without outcome
+        let error_reason = "Update stream ended without outcome".to_string();
+        let withdrawal_failed_event = FmcdEvent::WithdrawalFailed {
+            operation_id: format!("{:?}", operation_id),
+            federation_id: req.federation_id.to_string(),
+            reason: error_reason.clone(),
+            correlation_id: Some(context.correlation_id.clone()),
+            timestamp: Utc::now(),
+        };
+        if let Err(e) = self.event_bus.publish(withdrawal_failed_event).await {
+            error!(
+                operation_id = ?operation_id,
+                correlation_id = %context.correlation_id,
+                error = ?e,
+                "Failed to publish withdrawal failed event for stream timeout"
+            );
+        }
+
+        error!(
+            operation_id = ?operation_id,
+            "Update stream ended without outcome"
+        );
+
+        Err(AppError::new(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            anyhow!("{}", error_reason),
+        ))
+    }
+
     /// Pay a lightning invoice
     pub async fn pay_invoice(
         &self,
         req: LnPayRequest,
         context: RequestContext,
     ) -> Result<LnPayResponse, AppError> {
+        self.pay_invoice_with_resolver(req, context, None).await
+    }
+
+    /// Pay a lightning invoice with optional payment info resolver
+    pub async fn pay_invoice_with_resolver(
+        &self,
+        mut req: LnPayRequest,
+        context: RequestContext,
+        resolver: Option<&dyn PaymentInfoResolver>,
+    ) -> Result<LnPayResponse, AppError> {
         use crate::observability::{sanitize_invoice, sanitize_preimage};
 
         let client = self.get_client(req.federation_id).await?;
 
-        // Parse invoice - only support bolt11 in core, LNURL should be handled in API
-        // layer
+        // Use resolver if provided to handle non-Bolt11 payment info
+        if let Some(resolver) = resolver {
+            if let Some(resolved_invoice) = resolver
+                .resolve_payment_info(
+                    &req.payment_info,
+                    req.amount_msat,
+                    req.lnurl_comment.as_deref(),
+                )
+                .await?
+            {
+                req.payment_info = resolved_invoice;
+            }
+        }
+
+        // Parse invoice - after resolution, this should be a bolt11 invoice
         use std::str::FromStr;
 
         use fedimint_ln_common::lightning_invoice::Bolt11Invoice;
 
         let bolt11 = Bolt11Invoice::from_str(req.payment_info.trim()).map_err(|e| {
-            error!(error = ?e, "Failed to parse invoice");
+            error!(error = ?e, "Failed to parse invoice after resolution");
             AppError::validation_error(format!("Invalid bolt11 invoice: {}", e))
                 .with_context(context.clone())
         })?;

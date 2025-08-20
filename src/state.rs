@@ -5,7 +5,6 @@ use std::time::Instant;
 use anyhow::Result;
 use fedimint_client::ClientHandleArc;
 use fedimint_core::config::{FederationId, FederationIdPrefix};
-use tracing::info;
 
 use crate::core::multimint::MultiMint;
 use crate::core::services::{BalanceMonitor, DepositMonitor, PaymentLifecycleManager};
@@ -88,7 +87,7 @@ impl AppState {
 
     // Convenience accessors for backward compatibility
     pub fn multimint(&self) -> &MultiMint {
-        &self.core.multimint
+        &*self.core.multimint
     }
 
     pub fn start_time(&self) -> Instant {
