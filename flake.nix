@@ -12,6 +12,11 @@
     flake-utils.url = "github:numtide/flake-utils";
 
     fedimint.url = "github:fedimint/fedimint?ref=v0.9.0";
+
+    fenix = {
+      url = "github:nix-community/fenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
@@ -21,6 +26,7 @@
       flakebox,
       flake-utils,
       fedimint,
+      fenix,
     }:
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (
       system:
@@ -79,9 +85,9 @@
             "rust-analyzer"
             "rust-src"
           ];
-          # Use stable Rust channel with explicit version for Rust 1.88+ (required for if-let chains)
-          channel = "stable";
-          version = "1.91.0";
+          # Use latest stable Rust channel
+          # fedimint v0.9.0 requires Rust >= 1.83 for stabilized if-let-guard
+          channel = "latest";
         };
 
         toolchainsStd = flakeboxLib.mkStdFenixToolchains toolchainArgs;

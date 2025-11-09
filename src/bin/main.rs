@@ -105,6 +105,9 @@ async fn main() -> Result<()> {
 
     tracing::info!("Starting FMCD with structured logging and observability");
 
+    // Initialize crypto provider (required for v0.9.0)
+    fedimint_core::rustls::install_crypto_provider().await;
+
     // Ensure data directory exists
     std::fs::create_dir_all(&cli.data_dir)?;
 

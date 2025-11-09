@@ -54,25 +54,39 @@ pub trait PaymentInfoResolver: Send + Sync {
 }
 
 /// Invoice creation request with essential fields
+///
+/// The `gateway_id` field is optional. If not provided, the system will
+/// automatically select the best available gateway using Fedimint's
+/// `select_available_gateway()` API, which filters out offline gateways,
+/// prioritizes vetted gateways, and selects the lowest-fee gateway. If
+/// `gateway_id` is provided, the specific gateway will be used.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LnInvoiceRequest {
     pub amount_msat: Amount,
     pub description: String,
     pub expiry_time: Option<u64>,
-    pub gateway_id: PublicKey,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gateway_id: Option<PublicKey>,
     pub federation_id: FederationId,
     pub metadata: Option<serde_json::Value>,
 }
 
 /// Lightning payment request
+///
+/// The `gateway_id` field is optional. If not provided, the system will
+/// automatically select the best available gateway using Fedimint's
+/// `select_available_gateway()` API, which filters out offline gateways,
+/// prioritizes vetted gateways, and selects the lowest-fee gateway. If
+/// `gateway_id` is provided, the specific gateway will be used.
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LnPayRequest {
     pub payment_info: String,
     pub amount_msat: Option<Amount>,
     pub lnurl_comment: Option<String>,
-    pub gateway_id: PublicKey,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gateway_id: Option<PublicKey>,
     pub federation_id: FederationId,
 }
 
@@ -471,6 +485,15 @@ impl FmcdCore {
     }
 
     /// Create a lightning invoice
+    ///
+    /// This method creates a lightning invoice for the specified federation.
+    /// Gateway selection behavior:
+    /// - If `req.gateway_id` is provided, that specific gateway will be used
+    /// - If `req.gateway_id` is None, automatically selects the best available
+    ///   gateway using Fedimint's `select_available_gateway()` API, which:
+    ///   - Filters out offline gateways via health checks
+    ///   - Prioritizes vetted gateways
+    ///   - Selects the lowest-fee gateway among available options
     pub async fn create_invoice(
         &self,
         req: LnInvoiceRequest,
@@ -495,20 +518,43 @@ impl FmcdCore {
                 )
             })?;
 
-        let gateway = lightning_module
-            .select_gateway(&req.gateway_id)
-            .await
-            .ok_or_else(|| {
-                error!(
-                    gateway_id = %req.gateway_id,
-                    federation_id = %req.federation_id,
-                    "Failed to select gateway - gateway may be offline or not registered"
-                );
-                AppError::new(
-                    axum::http::StatusCode::BAD_REQUEST,
-                    anyhow!("Failed to select gateway with ID {}. Gateway may be offline or not registered with this federation.", req.gateway_id),
-                )
-            })?;
+        // Select gateway: use provided gateway_id or auto-select the best available
+        let gateway = match &req.gateway_id {
+            Some(gateway_id) => {
+                // Explicit gateway selection
+                lightning_module
+                    .select_gateway(gateway_id)
+                    .await
+                    .ok_or_else(|| {
+                        error!(
+                            gateway_id = %gateway_id,
+                            federation_id = %req.federation_id,
+                            "Failed to select gateway - gateway may be offline or not registered"
+                        );
+                        AppError::new(
+                            axum::http::StatusCode::BAD_REQUEST,
+                            anyhow!("Failed to select gateway with ID {}. Gateway may be offline or not registered with this federation.", gateway_id),
+                        )
+                    })?
+            }
+            None => {
+                // Auto-select best available gateway (filters offline, prioritizes vetted,
+                // selects lowest fee)
+                lightning_module
+                    .select_available_gateway()
+                    .await
+                    .ok_or_else(|| {
+                        error!(
+                            federation_id = %req.federation_id,
+                            "No available gateways found for invoice creation"
+                        );
+                        AppError::new(
+                            axum::http::StatusCode::SERVICE_UNAVAILABLE,
+                            anyhow!("No available gateways found. Please ensure at least one gateway is online and registered with this federation."),
+                        )
+                    })?
+            }
+        };
 
         info!(
             gateway_id = %gateway.gateway_id,
@@ -975,6 +1021,14 @@ impl FmcdCore {
     }
 
     /// Pay a lightning invoice
+    ///
+    /// Gateway selection behavior:
+    /// - If `req.gateway_id` is provided, that specific gateway will be used
+    /// - If `req.gateway_id` is None, automatically selects the best available
+    ///   gateway using Fedimint's `select_available_gateway()` API, which:
+    ///   - Filters out offline gateways via health checks
+    ///   - Prioritizes vetted gateways
+    ///   - Selects the lowest-fee gateway among available options
     pub async fn pay_invoice(
         &self,
         req: LnPayRequest,
@@ -984,6 +1038,15 @@ impl FmcdCore {
     }
 
     /// Pay a lightning invoice with optional payment info resolver
+    ///
+    /// The resolver is used to handle non-Bolt11 payment info (e.g., LNURL).
+    /// Gateway selection behavior:
+    /// - If `req.gateway_id` is provided, that specific gateway will be used
+    /// - If `req.gateway_id` is None, automatically selects the best available
+    ///   gateway using Fedimint's `select_available_gateway()` API, which:
+    ///   - Filters out offline gateways via health checks
+    ///   - Prioritizes vetted gateways
+    ///   - Selects the lowest-fee gateway among available options
     pub async fn pay_invoice_with_resolver(
         &self,
         mut req: LnPayRequest,
@@ -1069,21 +1132,43 @@ impl FmcdCore {
                     .with_context(context.clone())
             })?;
 
-        // Select gateway
-        let gateway = lightning_module
-            .select_gateway(&req.gateway_id)
-            .await
-            .ok_or_else(|| {
-                let error_msg = format!("Gateway {} not available", req.gateway_id);
-                error!(
-                    gateway_id = %req.gateway_id,
-                    payment_id = %payment_tracker.payment_id(),
-                    "Gateway not available"
-                );
-                // Note: Can't update tracker in non-async error closure
-                AppError::with_category(ErrorCategory::GatewayError, error_msg)
-                    .with_context(context.clone())
-            })?;
+        // Select gateway: use provided gateway_id or auto-select the best available
+        let gateway = match &req.gateway_id {
+            Some(gateway_id) => {
+                // Explicit gateway selection
+                lightning_module
+                    .select_gateway(gateway_id)
+                    .await
+                    .ok_or_else(|| {
+                        let error_msg = format!("Gateway {} not available", gateway_id);
+                        error!(
+                            gateway_id = %gateway_id,
+                            payment_id = %payment_tracker.payment_id(),
+                            "Gateway not available"
+                        );
+                        // Note: Can't update tracker in non-async error closure
+                        AppError::with_category(ErrorCategory::GatewayError, error_msg)
+                            .with_context(context.clone())
+                    })?
+            }
+            None => {
+                // Auto-select best available gateway (filters offline, prioritizes vetted,
+                // selects lowest fee)
+                lightning_module
+                    .select_available_gateway()
+                    .await
+                    .ok_or_else(|| {
+                        let error_msg = "No available gateways found".to_string();
+                        error!(
+                            payment_id = %payment_tracker.payment_id(),
+                            "No available gateways found for payment"
+                        );
+                        // Note: Can't update tracker in non-async error closure
+                        AppError::with_category(ErrorCategory::GatewayError, error_msg)
+                            .with_context(context.clone())
+                    })?
+            }
+        };
 
         // Create outgoing payment
         let OutgoingLightningPayment {
