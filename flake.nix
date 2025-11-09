@@ -2,16 +2,16 @@
   description = "A fedimint client daemon for server side applications to hold, use, and manage Bitcoin and ecash";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-24.11";
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
 
     flakebox = {
-      url = "github:rustshop/flakebox";
+      url = "github:dpc/flakebox/2f15f65d60c198fe49d849d68c2a2c95dc771ae5";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
     flake-utils.url = "github:numtide/flake-utils";
 
-    fedimint.url = "github:fedimint/fedimint?ref=v0.8.0";
+    fedimint.url = "github:fedimint/fedimint?ref=v0.9.0";
   };
 
   outputs =
@@ -43,22 +43,22 @@
             "Cargo.lock"
             ".cargo"
             "src"
+            "tests"
           ];
         };
 
         # Build configuration
         commonArgs = {
-          buildInputs =
-            [
-              # System libraries needed for dependencies
-              pkgs.zstd
-              pkgs.openssl
-              pkgs.protobuf
-            ]
-            # Add clang/llvm for cross-compilation support
-            ++ lib.optionals (pkgs.stdenv.hostPlatform != pkgs.stdenv.buildPlatform) [
-              pkgs.llvmPackages.clang
-            ];
+          buildInputs = [
+            # System libraries needed for dependencies
+            pkgs.zstd
+            pkgs.openssl
+            pkgs.protobuf
+          ]
+          # Add clang/llvm for cross-compilation support
+          ++ lib.optionals (pkgs.stdenv.hostPlatform != pkgs.stdenv.buildPlatform) [
+            pkgs.llvmPackages.clang
+          ];
           nativeBuildInputs = [
             pkgs.pkg-config
             pkgs.cmake
@@ -79,8 +79,9 @@
             "rust-analyzer"
             "rust-src"
           ];
-          # Use stable Rust channel
+          # Use stable Rust channel with explicit version for Rust 1.88+ (required for if-let chains)
           channel = "stable";
+          version = "1.91.0";
         };
 
         toolchainsStd = flakeboxLib.mkStdFenixToolchains toolchainArgs;
@@ -120,6 +121,7 @@
               (craneLib'.overrideArgs {
                 pname = "fmcd";
                 src = rustSrc;
+                cargoLock = ./Cargo.lock;
               }).overrideArgs
                 commonArgs;
           in
