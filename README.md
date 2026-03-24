@@ -97,10 +97,10 @@ Docker images are automatically published to Docker Hub for releases:
 
 ```bash
 # Pull the latest stable release (multi-arch: linux/amd64, linux/arm64)
-docker pull okjodom/fmcd:latest
+docker pull minmoto/fmcd:latest
 
 # Pull a specific version
-docker pull okjodom/fmcd:1.2.3
+docker pull minmoto/fmcd:1.2.3
 
 # Run the container
 docker run -d \
@@ -108,7 +108,7 @@ docker run -d \
   -e FMCD_ADDR="0.0.0.0:7070" \
   -v fmcd-data:/data \
   -p 7070:7070 \
-  okjodom/fmcd:latest
+  minmoto/fmcd:latest
 ```
 
 ### Docker Compose Example
@@ -118,7 +118,7 @@ Create a `docker-compose.yml` file with the following content for a complete dep
 ```yaml
 services:
   fmcd:
-    image: okjodom/fmcd:latest  # Or use locally built: fmcd:latest
+    image: minmoto/fmcd:latest  # Or use locally built: fmcd:latest
     container_name: fmcd
     restart: unless-stopped
 
@@ -209,7 +209,8 @@ docker push <your-registry>/fmcd:v0.4.0
 
 This repository uses GitHub Actions to automatically build and publish Docker images:
 
-- **Development builds** (single-arch, AMD64): Triggered on pushes to main/master
-- **Production releases** (multi-arch, AMD64 + ARM64): Triggered on version tags (v*)
+- **Development builds** (single-arch, AMD64): Triggered on pushes to main/master and published with branch/SHA tags
+- **Release PRs and version tags**: Triggered automatically on pushes to `main` by `release-plz`
+- **Production releases** (multi-arch, AMD64 + ARM64): Triggered on version tags (`v*`) and own the stable `latest` tag
 
 See [.github/workflows/README.md](.github/workflows/README.md) for detailed workflow documentation.

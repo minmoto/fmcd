@@ -4,7 +4,18 @@ This directory contains GitHub Actions workflows for building and publishing fmc
 
 ## Workflows
 
-### 1. docker-publish.yml
+### 1. release-plz.yml
+- **Purpose**: Create release PRs and cut version tags after the release PR is merged
+- **Triggers**:
+  - Push to `main`
+  - Manual workflow dispatch
+- **Features**:
+  - Opens or updates a release PR with version and changelog changes
+  - Creates `v*` tags only after the release PR is merged
+  - Uses git-only releases, so no crates.io publish is attempted
+  - Drives the tagged binary and multi-arch Docker release workflows
+
+### 2. docker-publish.yml
 - **Purpose**: Build and publish single-architecture (amd64) images for development and testing
 - **Triggers**:
   - Push to main/master branches
@@ -13,11 +24,11 @@ This directory contains GitHub Actions workflows for building and publishing fmc
   - **Note**: Explicitly ignores version tags (v*)
 - **Features**:
   - Uses Nix to build OCI containers
-  - Automatic tagging based on branches
+  - Automatic `main`/branch and commit-SHA tagging for development images
   - Dry run for pull requests
   - Fast builds for rapid development feedback
 
-### 2. docker-multiarch.yml
+### 3. docker-multiarch.yml
 - **Purpose**: Build and publish production multi-architecture images (amd64 and arm64)
 - **Triggers**:
   - **ONLY** version tags (v*) - no other triggers
@@ -33,6 +44,15 @@ Before these workflows can run successfully, you need to configure the following
 
 1. **DOCKER_HUB_USERNAME**: Your Docker Hub username
 2. **DOCKER_HUB_TOKEN**: Docker Hub access token (not password)
+3. **RELEASE_PLZ_TOKEN**: GitHub PAT with `contents` and `pull requests` write access
+
+The `RELEASE_PLZ_TOKEN` secret is required because tags created with the default `GITHUB_TOKEN` do not trigger the downstream `push tag` workflows that publish release binaries and Docker images.
+
+You also need to enable GitHub Actions workflow permissions to create pull requests:
+
+1. Go to Settings → Actions → General
+2. Under "Workflow permissions", enable write access
+3. Enable "Allow GitHub Actions to create and approve pull requests"
 
 ### Creating Docker Hub Access Token
 
@@ -54,7 +74,7 @@ Before these workflows can run successfully, you need to configure the following
 ## Image Tags
 
 ### Development Tags (docker-publish.yml)
-- `latest` - Latest commit from main/master branch
+- `main` - Latest development image from the default branch
 - `main-<sha>` - Branch with commit SHA
 - `pr-123` - Pull request builds (not pushed)
 
@@ -78,6 +98,18 @@ docker load < result
 # Run the container
 docker run --rm fmcd:latest
 ```
+
+## Release Flow
+
+1. Merge feature and fix PRs into `main`.
+2. `release-plz.yml` opens or updates a release PR with the next version and changelog.
+3. Merge the release PR when you want to cut a release.
+4. `release-plz.yml` creates the `vX.Y.Z` tag.
+5. The tag triggers:
+   - `release.yml` to build binaries and create the GitHub release.
+   - `docker-multiarch.yml` to publish stable multi-arch Docker tags.
+
+With this policy, `latest` always points to the latest stable tagged release, not the tip of `main`.
 
 ## Multi-Architecture Support
 
