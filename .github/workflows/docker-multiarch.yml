@@ -161,7 +161,7 @@ jobs:
             type=semver,pattern={{version}},value=${{ steps.version.outputs.tag }}
             type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.tag }}
             type=semver,pattern={{major}},value=${{ steps.version.outputs.tag }}
-            type=raw,value=latest,enable=${{ startsWith(steps.version.outputs.tag, 'v') }}
+            type=raw,value=latest,enable=${{ !contains(steps.version.outputs.tag, '-') }}
 
       - name: Load and push multi-arch images
         run: |

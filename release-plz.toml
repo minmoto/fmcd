@@ -11,8 +11,14 @@ dependencies_update = true
 # create tags for the releases
 git_tag_enable = true
 
+# use git tags instead of crates.io for version tracking and skip cargo publish
+git_only = true
+
 # disable GitHub releases
 git_release_enable = false
+
+# release only after merging the release PR
+release_always = false
 
 # labels for the release PR
 pr_labels = ["release"]
