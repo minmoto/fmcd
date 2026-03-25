@@ -1,0 +1,360 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [0.8.0] - 2026-03-25
+
+### 🚀 Features
+
+- First 3 endpoints
+- Validate endpoint
+- Stubs for remaining cli commands
+- Combine
+- Lninvoice
+- Awaitinvoice
+- Stub cashu router methods
+- Impl handle_listgateways
+- Impl switch_gateway
+- Impl deposit address
+- Impl handle awaitdeposit
+- Impl withdraw
+- Impl handle discoverversion
+- Impl handle config
+- Impl list operations
+- Impl backup
+- Impl backup
+- Add remaining cashu optional nuts
+- Impl hacky cashu check, info, and swap
+- Cashu mint and melt
+- Melt
+- Add websocket support for all fedimint commands
+- Jsonrpc websocket handling
+- Finish adding admin fm commands
+- Nix and flakebox
+- Add multimint clients to state
+- Helper get_client on state for pulling fedimint client out of multimint by id or default
+- Multimint support in mint handlers
+- Multimint cashu handlers
+- Add join endpoint to add new multimint client
+- Add /admin/federation-ids endpoint
+- Camelcase everything over http
+- Status handler route
+- Add metrics endpoint
+- Mprocs
+- Devshell
+- Fedimint 0.3
+- Typescript wrapper
+- Add fedimint-py and fedimint-go
+- Add external-ln-receive-pubkey
+- Claim external pubkey tweaked
+- P2pk and claim methods + refactor module types
+- Encode and decode notes to / from json
+- Encode and decode notes working clientd and ts
+- Add gateway_id requirement for all lightning endpoints
+- ActiveGatewayId for lightning
+- Update go client to 0.3
+- Finish updates to fedimint-go for 0.3
+- Continue fedimint-go 0.3 updates
+- Python updates continued
+- Finish updating python clients
+- Add just test-all
+- Objects for multiple input requests
+- Migrate fedimintex
+- Stateless-client
+- Start stateless token translation
+- Cashu stuff
+- Impl keysets
+- MigrateClients script
+- JoinFederations script
+- Init fedimint-nwc
+- Setup main and state
+- Nip47 server and user keys
+- Event loop setup
+- Relay pool + better logging
+- Started on nwc event handling
+- Payments manager
+- Pay invoice
+- Start keysend
+- Make invoice
+- Handlers
+- Start lookup invoice
+- Get_balance
+- Boilerplate getinfo
+- Progress
+- Progress
+- Frontend is rolling
+- Frontend progress
+- Simple nwc
+- Finish updating multimint, start on clientd
+- Build clientd oci
+- Clientd includes extra meta when creating invoice
+- Bump to fedimint 0.8.0
+- Introduce project tests
+- Automate docker publishing
+- Implement phoenixd-compatible authentication for fmcd
+- Simplify directory confs
+- Fmcd observability base
+- Comprehensive operation tracking for observability
+- Exhaustive match on withdrawal events
+- Push to minmo dockerhub
+- Align fmcd behavior with fedimint-client 0.8
+- Report with invoice amounts
+- Version fmcd in tandem with fedimint
+- *(ci)* Automate versioned Docker releases
+
+### 🐛 Bug Fixes
+
+- SelectNotesWithExactAmount not backported to v0.2 yet
+- Working await lnpay
+- Move api versions into nest
+- Remove cors
+- Bitcoin versioning
+- Typo
+- Replit files
+- Docs
+- Missing melt method
+- Cashu /info updates
+- Create address wrong instruction
+- Parse websocket v then use federation_id
+- Status code import pattern
+- Remove required invite code
+- Join returns connected federation_ids
+- Get info for all federations
+- Update for by federation admin responses
+- Deserialize to snake_case
+- Post not get for join
+- Fmt
+- Cors
+- Allow auth header in cors policy for preflight
+- Allow any headers
+- Default port 3333
+- Cargo.toml
+- Flake
+- Fix
+- Bugs
+- Remove default
+- Cashu endpoints for fedimint 0.3
+- Path multimint
+- Multimint path for 0.3
+- Tests
+- V0.3 updates
+- All tests done for typescript
+- Tests for p2pk and claim
+- Justfile and docs
+- Wscat mprocs
+- Add go and bun to devshell for wrappers
+- Python updates
+- Python tests
+- Updates
+- Updates
+- Flake fix for mac
+- Flakebox install + commonArgs in devshells
+- Remove openssl and add http:// for python test defaults
+- :> Added testify/assert || added basic tests for client
+- : Updated the test cases according to new changes in the fn, parameter, var names
+- :> Added support func to tests and Updated CreateNewFedimintClient()
+- :> Added main testing function - TestFedimintGo
+- :> justfile.local.just updated
+- :> Added test suite for LIGHTNING METHODS updated
+- :> changed the type of field in DecodeNotesResponse struct and MintSpendResponse
+- :> Added test suite for MINT METHODS
+- :> Added test suite for ONCHAIN METHODS
+- :> Transfered all TEST function to main.go and mirrored them with fedimint-ts
+- :> updated some parameters
+- :> Made some changes in parameters of func
+- :> Mirrored python tests with go tests + updated just.local files
+- :> discover_version now takes threshold as a copulsory input
+- :> Codebase cleanup
+- :> discover_version deserialization done + signal SIGSEGV Error treated
+- :> added deserialize functionality to all outputs
+- :> Made gatewayId as a compulsory parameter for all Ln methods
+- :> stash added ad1de49
+- :> Updated Ln test suite to accept ActiveGatewayIds
+- All go working
+- Fix
+- Fedimint-ts entrypoint
+- Target and lib options in tsconfig
+- Flake for devimint
+- Start fixing elixir
+- Broken async py
+- Flake add back rustflags
+- Specify multimint versions for publish
+- Specific versions
+- Fix
+- Add crates to flakboxLib paths
+- Flake.lock
+- Remove stateless until useful/supported
+- Cargo clippy
+- Better shutdown handling
+- Config handling
+- Info logging plus ignore keys
+- Fix
+- Shutdown handling
+- Fix
+- Fix
+- Fix
+- Fix
+- Fix
+- Fix
+- Finish db refactor
+- Workspace version
+- Geet it building
+- Get db working
+- Fix
+- Better invoices
+- Error handling
+- Notes on todos
+- Fix
+- Better handling
+- Sent info and writing keys correctly
+- Fix multimint dont kill on failed gateway cache update
+- Fix
+- Stdenv on darwin
+- Rebase flake.lock
+- Update config endpoint
+- Update discover_version endpoint
+- Update join endpoint
+- Update admin mod file
+- Update await_invoice endpoint
+- Invoice endpoint
+- Ln mod file
+- Update ln endpoints
+- Onchain endpoints
+- Fix
+- Update fedimint-nwc
+- Multimint workspace version
+- Add missing nwc description field
+- Qol
+- Nix locales
+- Clean lint cli and build matrix
+- Image tagging in multiarch publish
+- Multiplatform builds
+- Run release on tags only
+- Reviews on publish workflows
+- Implement atomic file operations for config management
+- Use nullable ID in JSON-RPC responses for auth errors
+- Fmcd build
+- Config gen
+- *(ci)* Serialize release-plz release runs
+- *(ci)* Order release-plz jobs on main pushes
+- *(ci)* Serialize release-plz workflow runs
+- *(ci)* Pin release-plz action to a valid tag
+- *(ci)* Unignore tracked cargo config
+
+### 🚜 Refactor
+
+- Move out create routers into helpers
+- Split out fedimint handlers into separate functions
+- Fedimint admin handlers
+- Snake_case filenames
+- Finish snake_casing
+- Cashu split out into files
+- Mint and melt modules
+- Move types and utils into new refactored structure
+- Wallet module
+- Move router create into main.rs so docs up front
+- Better websocket formatting
+- Admin routes with multimint
+- Multimint for ln handlers
+- State, req for all ws
+- Rename to state.multimint
+- Rename to onchain
+- Better lightning payment responses
+- Remove stateless from normal clientd
+- Move handlers up a level
+- State setup
+- Init app state
+- Move
+- Managers and services
+- Better payments management
+- Keys in nostr service
+- Send encrypted response
+- Make invoice handler
+- All handlers
+- Redb for payments and invoices
+- Restructure fmcd as dual library/binary crate
+- Consolidate business logic in FmcdCore and fix balance calculation
+
+### 📚 Documentation
+
+- Rename
+- Update readme for cashu mappings
+- Readme pic
+- Readme add fedimint endpoints
+- Readme updates
+- Cargo toml description
+- Add that it supports multiple federations
+- Update documentation in ts wrapper
+- Update fedimint-clientd usage docs
+- Notes
+- Add instructions for building docker oci
+- Simplify envs and readme
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump fedimint to 0.2.1
+- Bump version
+- Add license
+- Bump version
+- License in toml
+- Bump
+- Bump
+- Bump versions
+- Flakebox
+- Polish nix stuff and expose main app output
+- Rename health check endpoint
+- Add trace layer for logging requests
+- Remove trace layer middleware from health check route
+- Reorganize routes middlewares
+- Clientd updates
+- Multimint into fedimint-clientd
+- Tests script for fedimint-ts
+- Bump fedimint rc1
+- Bash in dev for linux
+- Update to v0.3.0-rc.2
+- Bump to fedimint rc.3 and update example.env
+- Prep version bump
+- Update tests in ts wrapper
+- Bump ts wrapper
+- Update flake.lock
+- Bump fedimint-0.3
+- Bump multimint
+- Peg fedimint-clientd to multimint version
+- Bump flakebox
+- Fixes for nix and rust versions, semgrep
+- Release 0.3.0
+- Dependabot
+- Bump flakebox
+- Release v0.3.1
+- Release-plz
+- Flake fixes with fenix
+- Release v0.3.1 flakebox fixes
+- Ignore .direnv
+- Polish state of fedimint-ts
+- Propose a patch release
+- Bump multimint
+- Release 0.3.2 multimint bump
+- Release 0.3.3
+- Bump
+- Correct workspace version ref
+- Bump workspace to 0.3.4
+- Bump 0.3.1
+- Bump flakes
+- Release 0.3.5 - new fedimint compatibility
+- Bump multimint version
+- Bump fedimint-clientd
+- Bump version
+- Update flakebox
+- Move /metrics endpoint to a dedicated port
+- Update flake packages
+- Minor lint rust code adjustments
+- Use published multimint for publishing
+- Peg fedimint and release ts
+- Simplify mprocs configs
+- Bump and standardize nix installers
+- Address reviews
+- Remove references to phoenixd
+- Flake fixes and improvements
+- Remove tweaked invoice and pubkey features
+
+<!-- generated by git-cliff -->
