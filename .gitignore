@@ -2,7 +2,9 @@
 /target-nix
 /.direnv
 .env
-.cargo
+/.cargo/*
+!/.cargo/
+!/.cargo/config.toml
 .vscode
 .DS_Store
 result
