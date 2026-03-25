@@ -1,0 +1,199 @@
+name: Docker Hub Multi-Arch Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: minmoto/fmcd
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - platform: linux/amd64
+            system: x86_64-linux
+          - platform: linux/arm64
+            system: aarch64-linux
+
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v14
+        with:
+          logger: pretty
+          extra-conf: |
+            experimental-features = nix-command flakes
+            extra-platforms = aarch64-linux
+            connect-timeout = 300
+            stalled-download-timeout = 300
+
+      - name: Setup QEMU for cross-platform builds
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: all
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@v8
+
+      - name: Build OCI container for ${{ matrix.platform }}
+        run: |
+          echo "Building for ${{ matrix.system }} on $(uname -m)"
+
+          # Configure Nix for cross-compilation if needed
+          if [ "${{ matrix.system }}" = "aarch64-linux" ] && [ "$(uname -m)" = "x86_64" ]; then
+            echo "Cross-compiling from x86_64 to aarch64"
+
+            # Check if QEMU binfmt is already registered
+            if [ -f /proc/sys/fs/binfmt_misc/qemu-aarch64 ]; then
+              echo "✓ QEMU binfmt for aarch64 is already registered"
+            else
+              echo "Setting up QEMU binfmt for aarch64..."
+              if docker run --rm --privileged multiarch/qemu-user-static --reset -p yes; then
+                echo "✓ QEMU binfmt successfully registered"
+              else
+                echo "⚠ Warning: Failed to register QEMU binfmt, but it might already be set up by the runner"
+                # Verify QEMU is actually working
+                if ! docker run --rm arm64v8/alpine uname -m 2>/dev/null | grep -q aarch64; then
+                  echo "✗ Error: QEMU emulation is not working properly"
+                  exit 1
+                fi
+                echo "✓ QEMU emulation verified to be working"
+              fi
+            fi
+          fi
+
+          # Build for the target system with verbose output
+          echo "Starting Nix build for ${{ matrix.system }}..."
+          if nix build .#packages.${{ matrix.system }}.oci --print-build-logs; then
+            echo "✓ Nix build succeeded for ${{ matrix.system }}"
+          else
+            echo "✗ Nix build failed for ${{ matrix.system }}"
+            exit 1
+          fi
+
+          # Save the archive path
+          if [ -L result ]; then
+            OCI_PATH=$(readlink -f result)
+            echo "OCI_ARCHIVE=$OCI_PATH" >> $GITHUB_ENV
+            echo "✓ OCI archive created at: $OCI_PATH"
+          else
+            echo "✗ Error: result symlink not found"
+            exit 1
+          fi
+
+          # Save archive as artifact for manifest creation
+          mkdir -p artifacts
+          if cp -L result artifacts/oci-${{ matrix.system }}.tar.gz; then
+            echo "✓ OCI archive copied to artifacts/oci-${{ matrix.system }}.tar.gz"
+            echo "  Archive size: $(du -h artifacts/oci-${{ matrix.system }}.tar.gz | cut -f1)"
+          else
+            echo "✗ Failed to copy OCI archive"
+            exit 1
+          fi
+
+          echo "✓ Build completed successfully for ${{ matrix.system }}"
+
+      - name: Upload OCI archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: oci-${{ matrix.system }}
+          path: artifacts/oci-${{ matrix.system }}.tar.gz
+          retention-days: 1
+
+  push:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all OCI archives
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Determine version tag
+        id: version
+        run: |
+          # Extract tag from git ref (this workflow only runs on tag pushes)
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+            echo "Using tag from push event: $TAG"
+          else
+            echo "Error: No tag detected in ref: ${{ github.ref }}"
+            echo "This workflow should only run on version tags"
+            exit 1
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Final tag: $TAG"
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}},value=${{ steps.version.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ steps.version.outputs.tag }}
+            type=semver,pattern={{major}},value=${{ steps.version.outputs.tag }}
+            type=raw,value=latest,enable=${{ startsWith(steps.version.outputs.tag, 'v') }}
+
+      - name: Load and push multi-arch images
+        run: |
+          # Load each architecture image
+          docker load < artifacts/oci-x86_64-linux/oci-x86_64-linux.tar.gz
+          AMD64_IMAGE=$(docker images --format "{{.Repository}}:{{.Tag}}" | head -n 1)
+
+          docker load < artifacts/oci-aarch64-linux/oci-aarch64-linux.tar.gz
+          ARM64_IMAGE=$(docker images --format "{{.Repository}}:{{.Tag}}" | head -n 1)
+
+          # Tag images with architecture suffix
+          BASE_TAG="${{ env.IMAGE_NAME }}:build-${{ github.sha }}"
+          docker tag $AMD64_IMAGE ${BASE_TAG}-amd64
+          docker tag $ARM64_IMAGE ${BASE_TAG}-arm64
+
+          # Push architecture-specific images
+          docker push ${BASE_TAG}-amd64
+          docker push ${BASE_TAG}-arm64
+
+          # Create and push manifest for each tag
+          for tag in $(echo "${{ steps.meta.outputs.tags }}" | tr '\n' ' '); do
+            echo "Creating manifest for: $tag"
+            docker manifest create $tag \
+              --amend ${BASE_TAG}-amd64 \
+              --amend ${BASE_TAG}-arm64
+
+            docker manifest annotate $tag ${BASE_TAG}-amd64 --arch amd64
+            docker manifest annotate $tag ${BASE_TAG}-arm64 --arch arm64
+
+            docker manifest push $tag
+          done
+
+          # Clean up temporary tags
+          docker manifest rm ${BASE_TAG}-amd64 || true
+          docker manifest rm ${BASE_TAG}-arm64 || true

@@ -1,0 +1,18 @@
+/target
+/target-nix
+/.direnv
+.env
+.cargo
+.vscode
+.DS_Store
+result
+/vendor
+
+# Data directories
+fmcd-data/
+fmcd.conf
+*.db
+*.db-*
+
+CLAUDE.md
+.claude/

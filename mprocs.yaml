@@ -1,0 +1,11 @@
+procs:
+  user:
+    shell: bash # if on Linux
+    # shell: zsh # if on macOS
+    stop: SIGKILL
+  fmcd:
+    shell: export RUST_BACKTRACE=1 && cargo run --manifest-path ./Cargo.toml
+    stop: SIGTERM
+  ngrok:
+    shell: ngrok http http://localhost:3333
+    stop: SIGTERM

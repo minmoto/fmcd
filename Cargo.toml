@@ -1,0 +1,87 @@
+[package]
+name = "fmcd"
+description = "A fedimint client daemon for server side applications to hold, use, and manage Bitcoin"
+version = "0.1.0"
+edition = "2021"
+repository = "https://github.com/minmoto/fmcd"
+keywords = ["fedimint", "bitcoin", "lightning", "ecash"]
+license = "MIT"
+readme = "README.md"
+authors = ["Minmo Developers"]
+
+[lib]
+name = "fmcd"
+path = "src/lib.rs"
+
+[[bin]]
+name = "fmcd"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.75"
+axum = { version = "0.7.1", features = ["json", "ws"] }
+axum-macros = "0.4.0"
+dotenv = "0.15.0"
+serde = "1.0.193"
+serde_json = "1.0.108"
+tokio = { version = "1.34.0", features = ["full"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json", "fmt"] }
+tracing-appender = "0.2"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+url = "2.5.0"
+lazy_static = "1.4.0"
+async-utility = "0.2.0"
+tower-http = { version = "0.5.2", features = ["cors", "auth", "trace"] }
+itertools = "0.12.0"
+lnurl-rs = { version = "0.9.0", features = ["async"], default-features = false }
+reqwest = { version = "0.12.3", features = [
+  "json",
+  "rustls-tls",
+], default-features = false }
+bitcoin = "0.32.7"
+time = { version = "0.3.25", features = ["formatting"] }
+chrono = { version = "0.4.31", features = ["serde"] }
+futures-util = "0.3.30"
+clap = { version = "3", features = ["derive", "env"] }
+fedimint-api-client = "0.8.0"
+fedimint-client = "0.8.0"
+fedimint-core = "0.8.0"
+fedimint-wallet-client = "0.8.0"
+fedimint-mint-client = "0.8.0"
+fedimint-ln-client = "0.8.0"
+fedimint-ln-common = "0.8.0"
+fedimint-rocksdb = "0.8.0"
+fedimint-bip39 = "0.8.0"
+fedimint-derive-secret = "0.8.0"
+rand = "0.8.5"
+bip39 = "2.1.0"
+hex = "0.4.3"
+base64 = "0.21"
+hmac = "0.12"
+sha2 = "0.10"
+toml = "0.8"
+
+futures = "0.3"
+async-stream = "0.3"
+tokio-stream = "0.1"
+metrics = { version = "0.23", default-features = false }
+metrics-exporter-prometheus = { version = "0.15.3", default-features = false }
+console = "0.15"
+async-trait = "0.1"
+
+[dev-dependencies]
+tempfile = "3.8"
+tower = { version = "0.4", features = ["util"] }
+tracing-test = "0.2"
+
+# The profile that 'cargo dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
+
+[profile.ci]
+inherits = "dev"
+incremental = false
+debug = "line-tables-only"
+lto = "off"
